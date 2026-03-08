@@ -1,5 +1,6 @@
 import SwiftUI
 import AppKit
+import Combine
 
 final class PasteAwareTextView: NSTextView {
     var onPasteImage: (() -> Void)?
@@ -83,6 +84,7 @@ struct SubmittableTextEditor: NSViewRepresentable {
 
     func updateNSView(_ scrollView: NSScrollView, context: Context) {
         guard let textView = scrollView.documentView as? NSTextView else { return }
+        context.coordinator.parent = self
         if textView.string != text {
             textView.string = text
         }
@@ -133,6 +135,73 @@ struct SubmittableTextEditor: NSViewRepresentable {
                 return true
             }
             return false
+        }
+    }
+}
+
+class AgentTab: ObservableObject, Identifiable {
+    let id: UUID
+    @Published var title: String
+    @Published var prompt = ""
+    @Published var output = ""
+    @Published var thinkingOutput = ""
+    @Published var responseOutput = ""
+    @Published var isRunning = false
+    @Published var errorMessage: String?
+    @Published var hasAttachedScreenshot = false
+    var streamTask: Task<Void, Never>?
+    var activeRunID: UUID?
+
+    init(title: String = "Agent") {
+        self.id = UUID()
+        self.title = title
+    }
+}
+
+class TabManager: ObservableObject {
+    @Published var tabs: [AgentTab] = []
+    @Published var selectedTabID: UUID
+    private var tabSubscriptions: [UUID: AnyCancellable] = [:]
+
+    init() {
+        let first = AgentTab(title: "Agent 1")
+        tabs = [first]
+        selectedTabID = first.id
+        bindTabChanges()
+    }
+
+    var activeTab: AgentTab {
+        tabs.first { $0.id == selectedTabID } ?? tabs[0]
+    }
+
+    func addTab() {
+        let tab = AgentTab(title: "Agent \(tabs.count + 1)")
+        tabs.append(tab)
+        observe(tab)
+        selectedTabID = tab.id
+    }
+
+    func closeTab(_ id: UUID) {
+        guard tabs.count > 1 else { return }
+        if let index = tabs.firstIndex(where: { $0.id == id }) {
+            let wasSelected = selectedTabID == id
+            tabs.remove(at: index)
+            tabSubscriptions[id] = nil
+            if wasSelected {
+                let newIndex = min(index, tabs.count - 1)
+                selectedTabID = tabs[newIndex].id
+            }
+        }
+    }
+
+    private func bindTabChanges() {
+        tabs.forEach(observe)
+    }
+
+    private func observe(_ tab: AgentTab) {
+        guard tabSubscriptions[tab.id] == nil else { return }
+        tabSubscriptions[tab.id] = tab.objectWillChange.sink { [weak self] _ in
+            self?.objectWillChange.send()
         }
     }
 }
@@ -200,12 +269,10 @@ struct PopoutView: View {
     var dismiss: () -> Void = {}
     @AppStorage("workspacePath") private var workspacePath: String = FileManager.default.homeDirectoryForCurrentUser.path
     @AppStorage("selectedModel") private var selectedModel: String = "composer-1.5"
-    @State private var prompt = ""
-    @State private var output = ""
-    @State private var isRunning = false
-    @State private var errorMessage: String?
-    @State private var hasAttachedScreenshot = false
+    @StateObject private var tabManager = TabManager()
     
+    private var tab: AgentTab { tabManager.activeTab }
+
     var body: some View {
         ZStack {
             LinearGradient(
@@ -221,8 +288,9 @@ struct PopoutView: View {
 
             VStack(spacing: 12) {
                 topBar
+                tabBar
 
-                if let error = errorMessage {
+                if let error = tab.errorMessage {
                     Text(error)
                         .font(.system(size: 12, weight: .medium))
                         .foregroundStyle(Color(red: 1.0, green: 0.64, blue: 0.67))
@@ -238,15 +306,13 @@ struct PopoutView: View {
 
                 outputCard
                     .frame(maxHeight: .infinity)
+                    .id(tab.id)
 
                 composerDock
             }
             .padding(14)
         }
         .frame(width: 460, height: 780)
-        .onChange(of: prompt) { _, newValue in
-            hasAttachedScreenshot = newValue.contains("[Screenshot attached:")
-        }
     }
 
     private var topBar: some View {
@@ -258,23 +324,12 @@ struct PopoutView: View {
                     .font(.system(size: 15, weight: .semibold))
                     .foregroundStyle(.white)
 
-                Text(isRunning ? "Streaming response" : "Ready")
+                Text(tab.isRunning ? "Streaming response" : "Ready")
                     .font(.system(size: 11, weight: .medium))
                     .foregroundStyle(.white.opacity(0.5))
             }
 
             Spacer()
-
-            Button {
-                (NSApp.delegate as? AppDelegate)?.showSettingsWindow(nil)
-            } label: {
-                Image(systemName: "gearshape")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(.white.opacity(0.72))
-                    .frame(width: 30, height: 30)
-                    .background(Color.white.opacity(0.05), in: Circle())
-            }
-            .buttonStyle(.plain)
 
             Button(action: dismiss) {
                 Image(systemName: "xmark")
@@ -288,9 +343,40 @@ struct PopoutView: View {
         .padding(.horizontal, 4)
     }
 
+    private var tabBar: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 4) {
+                ForEach(tabManager.tabs) { t in
+                    let isSelected = t.id == tabManager.selectedTabID
+                    TabChip(
+                        title: t.title,
+                        isSelected: isSelected,
+                        isRunning: t.isRunning,
+                        showClose: tabManager.tabs.count > 1,
+                        onSelect: { tabManager.selectedTabID = t.id },
+                        onClose: {
+                            stopStreaming(for: t)
+                            tabManager.closeTab(t.id)
+                        }
+                    )
+                }
+
+                Button(action: { tabManager.addTab() }) {
+                    Image(systemName: "plus")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(.white.opacity(0.6))
+                        .frame(width: 26, height: 26)
+                        .background(Color.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+                }
+                .buttonStyle(.plain)
+            }
+            .padding(.horizontal, 4)
+        }
+    }
+
     private var composerDock: some View {
         VStack(alignment: .leading, spacing: 12) {
-            if hasAttachedScreenshot {
+            if tab.hasAttachedScreenshot {
                 screenshotCard
             }
 
@@ -344,8 +430,8 @@ struct PopoutView: View {
                     pasteScreenshot()
                 } label: {
                     HStack(spacing: 6) {
-                        Image(systemName: hasAttachedScreenshot ? "photo.fill" : "paperclip")
-                        Text(hasAttachedScreenshot ? "Attached" : "Attach")
+                        Image(systemName: tab.hasAttachedScreenshot ? "photo.fill" : "paperclip")
+                        Text(tab.hasAttachedScreenshot ? "Attached" : "Attach")
                     }
                     .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(.white.opacity(0.82))
@@ -358,21 +444,37 @@ struct PopoutView: View {
             }
 
             HStack(alignment: .bottom, spacing: 10) {
-                SubmittableTextEditor(text: $prompt, isDisabled: isRunning, onSubmit: sendPrompt, onPasteImage: pasteScreenshot)
-                    .frame(height: 82)
-                    .padding(12)
-                    .background(editorBackground, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 18, style: .continuous)
-                            .stroke(Color.white.opacity(0.08), lineWidth: 1)
-                    )
+                SubmittableTextEditor(
+                    text: Binding(
+                        get: { tab.prompt },
+                        set: { newValue in
+                            tab.prompt = newValue
+                            tab.hasAttachedScreenshot = newValue.contains("[Screenshot attached:")
+                        }
+                    ),
+                    isDisabled: tab.isRunning,
+                    onSubmit: sendPrompt,
+                    onPasteImage: pasteScreenshot
+                )
+                .frame(height: 82)
+                .padding(12)
+                .background(editorBackground, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                        .stroke(Color.white.opacity(0.08), lineWidth: 1)
+                )
 
-                Button(action: sendPrompt) {
+                Button(action: {
+                    if tab.isRunning {
+                        stopStreaming()
+                    } else {
+                        sendPrompt()
+                    }
+                }) {
                     Group {
-                        if isRunning {
-                            ProgressView()
-                                .tint(.white)
-                                .scaleEffect(0.8)
+                        if tab.isRunning {
+                            Image(systemName: "stop.fill")
+                                .font(.system(size: 13, weight: .black))
                         } else {
                             Image(systemName: "arrow.up")
                                 .font(.system(size: 16, weight: .bold))
@@ -388,10 +490,10 @@ struct PopoutView: View {
                         ),
                         in: Circle()
                     )
-                    .opacity(canSend ? 1 : 0.45)
+                    .opacity(tab.isRunning || canSend ? 1 : 0.45)
                 }
                 .buttonStyle(.plain)
-                .disabled(!canSend)
+                .disabled(!tab.isRunning && !canSend)
             }
 
             Text("You've used 1% of your included API usage")
@@ -461,21 +563,21 @@ struct PopoutView: View {
     private var outputCard: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
-                Text("Agent")
+                Text(tab.title)
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(.white.opacity(0.88))
 
                 Spacer()
 
-                Text(isRunning ? "Streaming" : "Idle")
+                Text(tab.isRunning ? "Streaming" : "Idle")
                     .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(isRunning ? Color(red: 0.59, green: 0.83, blue: 1.0) : .white.opacity(0.4))
+                    .foregroundStyle(tab.isRunning ? Color(red: 0.59, green: 0.83, blue: 1.0) : .white.opacity(0.4))
             }
 
             ScrollViewReader { proxy in
                 ScrollView {
                     Group {
-                        if output.isEmpty {
+                        if tab.output.isEmpty {
                             VStack(alignment: .leading, spacing: 10) {
                                 Text("Response will appear here...")
                                     .font(.system(size: 14, weight: .medium))
@@ -489,7 +591,7 @@ struct PopoutView: View {
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .padding(16)
                         } else {
-                            Text(output)
+                            Text(tab.output)
                                 .font(.system(.caption, design: .monospaced))
                                 .foregroundStyle(.white.opacity(0.88))
                                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -505,7 +607,7 @@ struct PopoutView: View {
                     RoundedRectangle(cornerRadius: 18, style: .continuous)
                         .stroke(Color.white.opacity(0.08), lineWidth: 1)
                 )
-                .onChange(of: output) { _, _ in
+                .onChange(of: tab.output) { _, _ in
                     withAnimation(.easeOut(duration: 0.2)) {
                         proxy.scrollTo("outputEnd", anchor: .bottom)
                     }
@@ -551,13 +653,13 @@ struct PopoutView: View {
     }
 
     private var canSend: Bool {
-        !prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !isRunning
+        !tab.prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !tab.isRunning
     }
     
     private func deleteScreenshot() {
         let reference = "\n\n[Screenshot attached: .cursor/pasted-screenshot.png]"
-        prompt = prompt.replacingOccurrences(of: reference, with: "")
-        hasAttachedScreenshot = false
+        tab.prompt = tab.prompt.replacingOccurrences(of: reference, with: "")
+        tab.hasAttachedScreenshot = false
         let imageURL = URL(fileURLWithPath: workspacePath).appendingPathComponent(".cursor", isDirectory: true).appendingPathComponent("pasted-screenshot.png")
         try? FileManager.default.removeItem(at: imageURL)
     }
@@ -585,40 +687,154 @@ struct PopoutView: View {
         do {
             try pngData.write(to: destURL)
             let reference = "\n\n[Screenshot attached: .cursor/pasted-screenshot.png]"
-            if !prompt.contains(reference) {
-                prompt += reference
+            if !tab.prompt.contains(reference) {
+                tab.prompt += reference
             }
-            hasAttachedScreenshot = true
+            tab.hasAttachedScreenshot = true
         } catch {
             return
         }
     }
     
     private func sendPrompt() {
-        let trimmed = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
+        let currentTab = tab
+        let trimmed = currentTab.prompt.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
         
-        errorMessage = nil
-        output = ""
-        isRunning = true
+        let runID = UUID()
+        currentTab.streamTask?.cancel()
+        currentTab.errorMessage = nil
+        currentTab.output = ""
+        currentTab.thinkingOutput = ""
+        currentTab.responseOutput = ""
+        currentTab.isRunning = true
+        currentTab.activeRunID = runID
         
-        Task {
+        let task = Task {
             do {
                 let stream = try AgentRunner.stream(prompt: trimmed, workspacePath: workspacePath, model: selectedModel)
-                prompt = ""
-                hasAttachedScreenshot = false
+                guard currentTab.activeRunID == runID else { return }
+                currentTab.prompt = ""
+                currentTab.hasAttachedScreenshot = false
                 for try await chunk in stream {
-                    output += chunk
+                    guard currentTab.activeRunID == runID, !Task.isCancelled else { return }
+                    switch chunk {
+                    case .thinkingDelta(let text):
+                        currentTab.thinkingOutput += text
+                    case .thinkingCompleted:
+                        break
+                    case .assistantText(let text):
+                        mergeAssistantText(text, into: currentTab)
+                    }
+                    currentTab.output = renderOutput(for: currentTab)
                 }
-                isRunning = false
+                finishStreaming(for: currentTab, runID: runID)
+            } catch is CancellationError {
+                finishStreaming(for: currentTab, runID: runID)
             } catch let error as AgentRunnerError {
-                errorMessage = error.userMessage
-                isRunning = false
+                finishStreaming(for: currentTab, runID: runID, errorMessage: error.userMessage)
             } catch {
-                errorMessage = error.localizedDescription
-                isRunning = false
+                finishStreaming(for: currentTab, runID: runID, errorMessage: error.localizedDescription)
             }
         }
+        
+        currentTab.streamTask = task
+    }
+
+    private func stopStreaming(for currentTab: AgentTab? = nil) {
+        let tabToStop = currentTab ?? tab
+        tabToStop.activeRunID = nil
+        tabToStop.isRunning = false
+        tabToStop.streamTask?.cancel()
+        tabToStop.streamTask = nil
+    }
+
+    private func finishStreaming(for currentTab: AgentTab, runID: UUID, errorMessage: String? = nil) {
+        guard currentTab.activeRunID == runID else { return }
+        currentTab.errorMessage = errorMessage
+        currentTab.isRunning = false
+        currentTab.streamTask = nil
+        currentTab.activeRunID = nil
+    }
+
+    private func mergeAssistantText(_ incoming: String, into tab: AgentTab) {
+        guard !incoming.isEmpty else { return }
+
+        if tab.responseOutput == incoming {
+            return
+        }
+
+        if incoming.hasPrefix(tab.responseOutput) {
+            tab.responseOutput = incoming
+            return
+        }
+
+        tab.responseOutput += incoming
+    }
+
+    private func renderOutput(for tab: AgentTab) -> String {
+        let thinking = tab.thinkingOutput.trimmingCharacters(in: .whitespacesAndNewlines)
+        let response = tab.responseOutput.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        var sections: [String] = []
+        if !thinking.isEmpty {
+            sections.append("Thinking\n--------\n\(thinking)")
+        }
+        if !response.isEmpty {
+            sections.append(response)
+        }
+        return sections.joined(separator: "\n\n")
+    }
+}
+
+struct TabChip: View {
+    let title: String
+    let isSelected: Bool
+    let isRunning: Bool
+    let showClose: Bool
+    let onSelect: () -> Void
+    let onClose: () -> Void
+
+    var body: some View {
+        Button(action: onSelect) {
+            HStack(spacing: 6) {
+                if isRunning {
+                    ProgressView()
+                        .scaleEffect(0.45)
+                        .frame(width: 10, height: 10)
+                        .tint(.white)
+                }
+
+                Text(title)
+                    .font(.system(size: 12, weight: isSelected ? .semibold : .medium))
+                    .foregroundStyle(.white.opacity(isSelected ? 0.92 : 0.55))
+                    .lineLimit(1)
+
+                if showClose {
+                    Button(action: onClose) {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 8, weight: .bold))
+                            .foregroundStyle(.white.opacity(0.4))
+                            .frame(width: 16, height: 16)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 7)
+            .background(
+                isSelected
+                    ? Color.white.opacity(0.1)
+                    : Color.white.opacity(0.03),
+                in: RoundedRectangle(cornerRadius: 9, style: .continuous)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 9, style: .continuous)
+                    .stroke(isSelected ? Color.white.opacity(0.12) : Color.clear, lineWidth: 1)
+            )
+        }
+        .buttonStyle(.plain)
     }
 }
 

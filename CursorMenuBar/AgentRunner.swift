@@ -4,6 +4,7 @@ import Foundation
 private struct StreamEvent: Decodable {
     let type: String?
     let subtype: String?
+    let text: String?
     let message: StreamMessage?
 }
 
@@ -14,6 +15,12 @@ private struct StreamMessage: Decodable {
 private struct StreamContent: Decodable {
     let type: String?
     let text: String?
+}
+
+enum AgentStreamChunk {
+    case thinkingDelta(String)
+    case thinkingCompleted
+    case assistantText(String)
 }
 
 enum AgentRunnerError: Error {
@@ -42,7 +49,7 @@ enum AgentRunnerError: Error {
 
 @MainActor
 final class AgentRunner {
-    static func stream(prompt: String, workspacePath: String, model: String? = nil) throws -> AsyncThrowingStream<String, Error> {
+    static func stream(prompt: String, workspacePath: String, model: String? = nil) throws -> AsyncThrowingStream<AgentStreamChunk, Error> {
         guard let agentPath = findAgentPath() else {
             throw AgentRunnerError.agentNotFound
         }
@@ -116,11 +123,20 @@ final class AgentRunner {
                                 streamComplete = true
                                 break
                             }
-                            
+
+                            if event.type == "thinking" {
+                                if event.subtype == "delta", let text = event.text, !text.isEmpty {
+                                    continuation.yield(.thinkingDelta(text))
+                                } else if event.subtype == "completed" {
+                                    continuation.yield(.thinkingCompleted)
+                                }
+                                continue
+                            }
+
                             if event.type == "assistant", let message = event.message, let content = message.content {
                                 for item in content {
                                     if item.type == "text", let text = item.text, !text.isEmpty {
-                                        continuation.yield(text)
+                                        continuation.yield(.assistantText(text))
                                     }
                                 }
                             }

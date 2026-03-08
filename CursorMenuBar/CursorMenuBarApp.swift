@@ -87,11 +87,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    @objc func showSettingsWindow(_ sender: Any?) {
-        NSApp.activate(ignoringOtherApps: true)
-        NSApp.perform(Selector(("showSettingsWindow:")), with: nil)
-    }
-
     private func positionNearStatusItem() {
         guard let button = statusItem.button,
               let buttonWindow = button.window else { return }
