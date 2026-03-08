@@ -143,6 +143,7 @@ class AgentTab: ObservableObject, Identifiable {
     let id: UUID
     @Published var title: String
     @Published var prompt = ""
+    @Published var submittedPrompt = ""
     @Published var output = ""
     @Published var thinkingOutput = ""
     @Published var responseOutput = ""
@@ -562,16 +563,25 @@ struct PopoutView: View {
 
     private var outputCard: some View {
         VStack(alignment: .leading, spacing: 10) {
-            HStack {
-                Text(tab.title)
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(.white.opacity(0.88))
+            if !tab.submittedPrompt.isEmpty {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("User")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(.white.opacity(0.5))
 
-                Spacer()
-
-                Text(tab.isRunning ? "Streaming" : "Idle")
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(tab.isRunning ? Color(red: 0.59, green: 0.83, blue: 1.0) : .white.opacity(0.4))
+                    Text(tab.submittedPrompt)
+                        .font(.system(size: 13, weight: .medium, design: .monospaced))
+                        .foregroundStyle(.white.opacity(0.92))
+                        .fixedSize(horizontal: false, vertical: true)
+                        .textSelection(.enabled)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(14)
+                .background(Color.white.opacity(0.04), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .stroke(Color.white.opacity(0.08), lineWidth: 1)
+                )
             }
 
             ScrollViewReader { proxy in
@@ -579,24 +589,70 @@ struct PopoutView: View {
                     Group {
                         if tab.output.isEmpty {
                             VStack(alignment: .leading, spacing: 10) {
-                                Text("Response will appear here...")
-                                    .font(.system(size: 14, weight: .medium))
-                                    .foregroundStyle(.white.opacity(0.58))
+                                if tab.isRunning || !tab.submittedPrompt.isEmpty {
+                                    Text(tab.isRunning ? "Processing request..." : "Response will appear here...")
+                                        .font(.system(size: 14, weight: .medium))
+                                        .foregroundStyle(.white.opacity(0.58))
 
-                                Text("Ask a question below and CursorBar will stream the answer into this panel.")
-                                    .font(.system(size: 12, weight: .medium))
-                                    .foregroundStyle(.white.opacity(0.38))
-                                    .fixedSize(horizontal: false, vertical: true)
+                                    Text(tab.isRunning
+                                         ? "Agent output will stream below once it starts arriving."
+                                         : "Ask a question below and CursorBar will stream the answer into this panel.")
+                                        .font(.system(size: 12, weight: .medium))
+                                        .foregroundStyle(.white.opacity(0.38))
+                                        .fixedSize(horizontal: false, vertical: true)
+                                } else {
+                                    Text("Response will appear here...")
+                                        .font(.system(size: 14, weight: .medium))
+                                        .foregroundStyle(.white.opacity(0.58))
+
+                                    Text("Ask a question below and CursorBar will stream the answer into this panel.")
+                                        .font(.system(size: 12, weight: .medium))
+                                        .foregroundStyle(.white.opacity(0.38))
+                                        .fixedSize(horizontal: false, vertical: true)
+                                }
                             }
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .padding(16)
                         } else {
-                            Text(tab.output)
-                                .font(.system(.caption, design: .monospaced))
-                                .foregroundStyle(.white.opacity(0.88))
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .padding(14)
-                                .textSelection(.enabled)
+                            VStack(alignment: .leading, spacing: 14) {
+                                if !trimmedThinkingOutput.isEmpty {
+                                    VStack(alignment: .leading, spacing: 10) {
+                                        HStack(spacing: 8) {
+                                            Image(systemName: "ellipsis")
+                                                .font(.system(size: 11, weight: .bold))
+                                                .foregroundStyle(.white.opacity(0.68))
+
+                                            Text("Thinking")
+                                                .font(.system(size: 12, weight: .semibold))
+                                                .foregroundStyle(.white.opacity(0.76))
+                                        }
+
+                                        Text(trimmedThinkingOutput)
+                                            .font(.system(size: 12, weight: .regular, design: .monospaced))
+                                            .foregroundStyle(.white.opacity(0.62))
+                                            .fixedSize(horizontal: false, vertical: true)
+                                            .textSelection(.enabled)
+                                    }
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .padding(14)
+                                    .background(Color.white.opacity(0.035), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                            .stroke(Color.white.opacity(0.14), lineWidth: 1)
+                                    )
+                                }
+
+                                if !trimmedResponseOutput.isEmpty {
+                                    Text(trimmedResponseOutput)
+                                        .font(.system(size: 13, weight: .medium, design: .monospaced))
+                                        .foregroundStyle(.white.opacity(0.9))
+                                        .frame(maxWidth: .infinity, alignment: .leading)
+                                        .fixedSize(horizontal: false, vertical: true)
+                                        .textSelection(.enabled)
+                                }
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(14)
                         }
                     }
                     .id("outputEnd")
@@ -652,6 +708,14 @@ struct PopoutView: View {
         Color.white.opacity(0.11)
     }
 
+    private var trimmedThinkingOutput: String {
+        tab.thinkingOutput.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var trimmedResponseOutput: String {
+        tab.responseOutput.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
     private var canSend: Bool {
         !tab.prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !tab.isRunning
     }
@@ -704,6 +768,7 @@ struct PopoutView: View {
         let runID = UUID()
         currentTab.streamTask?.cancel()
         currentTab.errorMessage = nil
+        currentTab.submittedPrompt = trimmed
         currentTab.output = ""
         currentTab.thinkingOutput = ""
         currentTab.responseOutput = ""
