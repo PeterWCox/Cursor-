@@ -1,35 +1,16 @@
 import SwiftUI
+import AppKit
 
 @main
 struct CursorMenuBarApp: App {
     @StateObject private var appState = AppState()
     
     var body: some Scene {
-        MenuBarExtra("Cursor Quick Prompt", image: "MenuBarIcon") {
-            Button("Send to Cursor...") {
-                appState.showPopout = true
-            }
-            Divider()
-            Button("Settings...") {
-                appState.showSettings = true
-            }
-            Divider()
-            Button("Quit") {
-                NSApplication.shared.terminate(nil)
-            }
-        }
-        .menuBarExtraStyle(.window)
-        
-        Window("Send to Cursor", id: "popout") {
+        MenuBarExtra("Cursor Quick Prompt", systemImage: "bubble.left.and.bubble.right.fill") {
             PopoutView()
                 .environmentObject(appState)
         }
-        .windowStyle(.automatic)
-        .windowResizability(.contentSize)
-        .defaultSize(width: 420, height: 360)
-        .commandsRemoved()
-        .defaultPosition(.center)
-        .keyboardShortcut("p", modifiers: .command)
+        .menuBarExtraStyle(.window)
         
         Settings {
             SettingsView()
@@ -39,22 +20,36 @@ struct CursorMenuBarApp: App {
 }
 
 class AppState: ObservableObject {
-    @Published var showPopout = false {
-        didSet {
-            if showPopout {
-                openPopout()
-            }
-        }
-    }
-    @Published var showSettings = false
+    @AppStorage("workspacePath") var workspacePath: String = FileManager.default.homeDirectoryForCurrentUser.path
     
-    private func openPopout() {
-        DispatchQueue.main.async {
-            NSApp.activate(ignoringOtherApps: true)
-            if let window = NSApp.windows.first(where: { $0.identifier?.rawValue == "popout" }) {
-                window.makeKeyAndOrderFront(nil)
+    var workspaceDisplayName: String {
+        guard !workspacePath.isEmpty else { return "" }
+        let url = URL(fileURLWithPath: workspacePath)
+        if workspacePath == FileManager.default.homeDirectoryForCurrentUser.path {
+            return "~/"
+        }
+        return url.lastPathComponent.isEmpty ? url.deletingLastPathComponent().lastPathComponent : url.lastPathComponent
+    }
+    
+    func changeWorkspace() {
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { return }
+            let panel = NSOpenPanel()
+            panel.canChooseFiles = false
+            panel.canChooseDirectories = true
+            panel.allowsMultipleSelection = false
+            panel.canCreateDirectories = true
+            panel.title = "Select Workspace"
+            panel.message = "Choose the repository directory where Cursor agent will work."
+            
+            if !self.workspacePath.isEmpty && FileManager.default.fileExists(atPath: self.workspacePath) {
+                panel.directoryURL = URL(fileURLWithPath: self.workspacePath)
             } else {
-                NSApp.sendAction(Selector(("showWindow:")), to: nil, from: nil)
+                panel.directoryURL = FileManager.default.homeDirectoryForCurrentUser
+            }
+            
+            if panel.runModal() == .OK, let url = panel.url {
+                self.workspacePath = url.path
             }
         }
     }

@@ -1,0 +1,44 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Build CursorMenuBar",
+      "type": "shell",
+      "command": "xcodebuild",
+      "args": [
+        "-project",
+        "${workspaceFolder}/CursorMenuBar.xcodeproj",
+        "-scheme",
+        "CursorMenuBar",
+        "-configuration",
+        "Debug",
+        "build"
+      ],
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      },
+      "problemMatcher": ["$xcodebuild"],
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      }
+    },
+    {
+      "label": "Build and Run CursorMenuBar",
+      "type": "shell",
+      "command": "xcodebuild",
+      "args": [
+        "-project",
+        "${workspaceFolder}/CursorMenuBar.xcodeproj",
+        "-scheme",
+        "CursorMenuBar",
+        "-configuration",
+        "Debug",
+        "build"
+      ],
+      "dependsOn": "Build CursorMenuBar",
+      "problemMatcher": ["$xcodebuild"]
+    }
+  ]
+}

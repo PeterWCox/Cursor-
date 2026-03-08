@@ -1,21 +1,52 @@
-# Dependencies
-node_modules/
+# Xcode
+build/
+DerivedData/
+*.xcuserstate
+xcuserdata/
+*.xccheckout
+*.moved-aside
+*.pbxuser
+!default.pbxuser
+*.mode1v3
+!default.mode1v3
+*.mode2v3
+!default.mode2v3
+*.perspectivev3
+!default.perspectivev3
+*.xcscmblueprint
+*.xcworkspace
+!default.xcworkspace
+*.hmap
+*.ipa
+*.dSYM.zip
+*.dSYM
+.timeline.xctimeline
+.swiftpm/
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+.DocumentRevisions-V100
+.fseventsd
+.Spotlight-V100
+.TemporaryItems
+.Trashes
+.VolumeIcon.icns
+.com.apple.timemachine.donotpresent
+*.icloud
 
 # Build output
-dist/
-out/
-build/
 *.app
-
-# Electron
-release/
+out/
+dist/
 
 # IDE / Editor
 .idea/
-.vscode/
 *.swp
 *.swo
-.DS_Store
+*~
 
 # Logs
 *.log
