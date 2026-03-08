@@ -2,6 +2,9 @@
 
 A macOS menu bar app that lets you send prompts to Cursor's agent from anywhere, without switching to the IDE.
 
+<img width="611" height="958" alt="image" src="https://github.com/user-attachments/assets/fa7c37a8-5e2a-4eb7-97b0-1ff3907f0157" />
+
+
 ## Prerequisites
 
 1. **Cursor CLI** — Install and authenticate:
