@@ -18,3 +18,9 @@ XXX. Tool calls
 3. Multiple screenshots
 4. Live reload
 5. Allow queueing of messages
+
+
+The text box placeholder was changed from
+"Plan, @ for context, / for commands"
+to
+"Plan, @ for context, / for commands.

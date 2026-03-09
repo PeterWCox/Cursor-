@@ -1060,8 +1060,36 @@ struct PopoutView: View {
         }
     }
 
+    /// Inserts line breaks at natural boundaries so run-on summary text is readable.
+    private func normalizedAssistantText(_ raw: String) -> String {
+        var result = raw
+        // "). " or ")." followed by capital (e.g. ").Intentionally") -> paragraph break
+        result = result.replacingOccurrences(of: "). ", with: ").\n\n")
+        if let regex = try? NSRegularExpression(pattern: "\\)\\.([A-Z])", options: []) {
+            let range = NSRange(result.startIndex..., in: result)
+            result = regex.stringByReplacingMatches(
+                in: result,
+                options: [],
+                range: range,
+                withTemplate: ").\n\n$1"
+            )
+        }
+        // Sentence boundary: ". " before capital letter, but not "1. " numbered lists
+        if let regex = try? NSRegularExpression(pattern: "([a-z])\\. ([A-Z])", options: []) {
+            let range = NSRange(result.startIndex..., in: result)
+            result = regex.stringByReplacingMatches(
+                in: result,
+                options: [],
+                range: range,
+                withTemplate: "$1.\n\n$2"
+            )
+        }
+        return result
+    }
+
     private func assistantAttributedText(_ raw: String) -> AttributedString {
-        (try? AttributedString(markdown: raw, options: .init(interpretedSyntax: .full))) ?? AttributedString(raw)
+        let normalized = normalizedAssistantText(raw)
+        return (try? AttributedString(markdown: normalized, options: .init(interpretedSyntax: .full))) ?? AttributedString(normalized)
     }
 
     @ViewBuilder
