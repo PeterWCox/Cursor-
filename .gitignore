@@ -48,6 +48,9 @@ dist/
 *.swo
 *~
 .cursor/pasted-screenshot.png
+.cursor/pasted-screenshot-1.png
+.cursor/pasted-screenshot-2.png
+.cursor/pasted-screenshot-3.png
 
 # Logs
 *.log
