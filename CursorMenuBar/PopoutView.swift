@@ -196,6 +196,8 @@ struct PopoutView: View {
                 onCommitAndPush: { sendInCurrentTab(prompt: QuickActionPrompts.commitAndPush) }
             )
 
+            queuedFollowUpsView
+
             ForEach(Array(attachedPaths.enumerated()), id: \.offset) { _, path in
                 ScreenshotCardView(
                     path: path,
@@ -213,8 +215,8 @@ struct PopoutView: View {
                             tab.hasAttachedScreenshot = !screenshotPaths(from: newValue).isEmpty
                         }
                     ),
-                    isDisabled: tab.isRunning,
-                    onSubmit: sendPrompt,
+                    isDisabled: false,
+                    onSubmit: submitOrQueuePrompt,
                     onPasteImage: pasteScreenshot
                 )
                 .frame(height: 88)
@@ -288,7 +290,7 @@ struct PopoutView: View {
                 isRunning: tab.isRunning,
                 canSend: canSend,
                 onSummarize: clearContext,
-                onSend: sendPrompt,
+                onSend: submitOrQueuePrompt,
                 onStop: { stopStreaming() }
             )
 
@@ -342,8 +344,49 @@ struct PopoutView: View {
         CursorTheme.border
     }
 
+    @ViewBuilder
+    private var queuedFollowUpsView: some View {
+        if !tab.followUpQueue.isEmpty {
+            VStack(alignment: .leading, spacing: 6) {
+                ForEach(tab.followUpQueue) { item in
+                    HStack(spacing: 8) {
+                        Text(item.text)
+                            .font(.system(size: 13, weight: .medium))
+                            .foregroundStyle(CursorTheme.textPrimary)
+                            .lineLimit(2)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        Button(action: {
+                            tab.followUpQueue.removeAll { $0.id == item.id }
+                        }) {
+                            Image(systemName: "xmark.circle.fill")
+                                .font(.system(size: 14))
+                                .foregroundStyle(CursorTheme.textTertiary)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .background(CursorTheme.surfaceMuted.opacity(0.8), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                }
+            }
+        }
+    }
+
     private var canSend: Bool {
-        !tab.prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !tab.isRunning
+        !tab.prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    /// Submit the current prompt: send immediately if idle, or queue as follow-up if agent is running.
+    private func submitOrQueuePrompt() {
+        let trimmed = tab.prompt.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        if tab.isRunning {
+            tab.followUpQueue.append(QueuedFollowUp(text: trimmed))
+            tab.prompt = ""
+            tab.hasAttachedScreenshot = false
+            return
+        }
+        sendPrompt()
     }
 
     private func clearContext() {
@@ -460,6 +503,14 @@ struct PopoutView: View {
                 finishStreaming(for: currentTab, runID: runID, turnID: turnID, errorMessage: error.userMessage)
             } catch {
                 finishStreaming(for: currentTab, runID: runID, turnID: turnID, errorMessage: error.localizedDescription)
+            }
+
+            Task { @MainActor in
+                if let first = currentTab.followUpQueue.first {
+                    currentTab.followUpQueue.removeFirst()
+                    currentTab.prompt = first.text
+                    sendPrompt()
+                }
             }
         }
 

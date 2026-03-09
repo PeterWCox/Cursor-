@@ -3,6 +3,16 @@ import Combine
 
 // MARK: - Tab and conversation state
 
+/// A message queued to send as soon as the agent finishes its current response.
+struct QueuedFollowUp: Identifiable, Equatable {
+    let id: UUID
+    var text: String
+    init(id: UUID = UUID(), text: String) {
+        self.id = id
+        self.text = text
+    }
+}
+
 class AgentTab: ObservableObject, Identifiable {
     let id: UUID
     @Published var title: String
@@ -12,6 +22,8 @@ class AgentTab: ObservableObject, Identifiable {
     @Published var errorMessage: String?
     @Published var hasAttachedScreenshot = false
     @Published var scrollToken = UUID()
+    /// Messages to send one-by-one as soon as the agent finishes each response.
+    @Published var followUpQueue: [QueuedFollowUp] = []
     var streamTask: Task<Void, Never>?
     var activeRunID: UUID?
     var activeTurnID: UUID?
