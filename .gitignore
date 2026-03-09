@@ -47,6 +47,7 @@ dist/
 *.swp
 *.swo
 *~
+.cursor/pasted-screenshot.png
 
 # Logs
 *.log
