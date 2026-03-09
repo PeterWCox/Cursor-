@@ -2,6 +2,9 @@
 
 `CursorBar` is a native macOS menu bar app for sending prompts to the Cursor CLI agent without switching back to the editor. It opens as a floating panel, streams agent output live, and runs against the repository you choose.
 
+<img width="681" height="908" alt="image" src="https://github.com/user-attachments/assets/a0135093-cb93-48b0-9a82-374c8047e214" />
+
+
 ## What It Does
 
 - Lives in the macOS menu bar with no Dock icon
