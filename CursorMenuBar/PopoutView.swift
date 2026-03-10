@@ -15,13 +15,14 @@ struct PopoutView: View {
     @EnvironmentObject var appState: AppState
     var dismiss: () -> Void = {}
     @AppStorage("workspacePath") private var workspacePath: String = FileManager.default.homeDirectoryForCurrentUser.path
-    @AppStorage("selectedModel") private var selectedModel: String = "auto"
+    @AppStorage("selectedModel") private var selectedModel: String = AvailableModels.autoID
     @AppStorage("messagesSentForUsage") private var messagesSentForUsage: Int = 0
     @EnvironmentObject var tabManager: TabManager
     @State private var devFolders: [URL] = []
     @State private var gitBranches: [String] = []
     @State private var currentBranch: String = ""
     @State private var quickActionCommands: [QuickActionCommand] = []
+    @State private var composerTextHeight: CGFloat = 24
 
     private var tab: AgentTab { tabManager.activeTab }
 
@@ -80,6 +81,7 @@ struct PopoutView: View {
         .frame(minWidth: 360, maxWidth: .infinity, minHeight: 400, maxHeight: .infinity)
         .background(CursorTheme.panelGradient)
         .onAppear {
+            sanitizeSelectedModel()
             for t in tabManager.tabs where t.workspacePath.isEmpty {
                 t.workspacePath = workspacePath
             }
@@ -91,6 +93,9 @@ struct PopoutView: View {
         }
         .onChange(of: workspacePath) { _, _ in
             quickActionCommands = QuickActionStorage.commandsForWorkspace(workspacePath: workspacePath)
+        }
+        .onChange(of: selectedModel) { _, _ in
+            sanitizeSelectedModel()
         }
         .onChange(of: tabManager.selectedTabID) { _, _ in
             let active = tabManager.activeTab
@@ -107,6 +112,13 @@ struct PopoutView: View {
                     tabManager.addTab(lastWorkspacePath: tab.workspacePath)
                 }
                 .keyboardShortcut("t", modifiers: .command)
+                .opacity(0)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+                Button("New Tab") {
+                    tabManager.addTab(lastWorkspacePath: tab.workspacePath)
+                }
+                .keyboardShortcut("n", modifiers: .command)
                 .opacity(0)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
 
@@ -341,37 +353,47 @@ struct PopoutView: View {
                 )
             }
 
-            ZStack(alignment: .topLeading) {
-                SubmittableTextEditor(
-                    text: Binding(
-                        get: { tab.prompt },
-                        set: { newValue in
-                            tab.prompt = newValue
-                            tab.hasAttachedScreenshot = !screenshotPaths(from: newValue).isEmpty
+            HStack(alignment: .bottom, spacing: 12) {
+                ZStack(alignment: .topLeading) {
+                    SubmittableTextEditor(
+                        text: Binding(
+                            get: { tab.prompt },
+                            set: { newValue in
+                                tab.prompt = newValue
+                                tab.hasAttachedScreenshot = !screenshotPaths(from: newValue).isEmpty
+                            }
+                        ),
+                        isDisabled: false,
+                        onSubmit: submitOrQueuePrompt,
+                        onPasteImage: pasteScreenshot,
+                        onHeightChange: { newHeight in
+                            composerTextHeight = newHeight
                         }
-                    ),
-                    isDisabled: false,
-                    onSubmit: submitOrQueuePrompt,
-                    onPasteImage: pasteScreenshot
-                )
-                .frame(height: 88)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 10)
-                .background(CursorTheme.editor, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 16, style: .continuous)
-                        .stroke(CursorTheme.border, lineWidth: 1)
-                )
+                    )
+                    .frame(height: composerHeight)
 
-                if tab.prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    Text("Send message and/or ⌘V to paste one or more screenshots from clipboard")
-                        .font(.system(size: 13, weight: .regular, design: .monospaced))
-                        .foregroundStyle(CursorTheme.textTertiary)
-                        .padding(.leading, 16)
-                        .padding(.top, 14)
-                        .allowsHitTesting(false)
+                    if tab.prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        Text("Send message and/or ⌘V to paste one or more screenshots from clipboard")
+                            .font(.system(size: 13, weight: .regular, design: .monospaced))
+                            .foregroundStyle(CursorTheme.textTertiary)
+                            .padding(.leading, 4)
+                            .padding(.top, 6)
+                            .padding(.trailing, 8)
+                            .allowsHitTesting(false)
+                    }
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+                sendStopButton
+                    .padding(.bottom, 2)
             }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .background(CursorTheme.editor, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .stroke(CursorTheme.border, lineWidth: 1)
+            )
 
             HStack(alignment: .center, spacing: 8) {
                 WorkspacePickerView(
@@ -426,18 +448,15 @@ struct PopoutView: View {
                     gitBranches = list
                     tab.currentBranch = cur
                 }
-            }
 
-            ComposerActionButtonsView(
-                hasContext: !tab.turns.isEmpty || !tab.prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-                isRunning: tab.isRunning,
-                canSend: canSend,
-                contextUsed: estimatedContextTokens(prompt: tab.prompt, turns: tab.turns).used,
-                contextLimit: AppLimits.contextTokenLimit,
-                onSummarize: compressContext,
-                onSend: submitOrQueuePrompt,
-                onStop: { stopStreaming() }
-            )
+                ComposerActionButtonsView(
+                    hasContext: !tab.turns.isEmpty || !tab.prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                    isRunning: tab.isRunning,
+                    contextUsed: estimatedContextTokens(prompt: tab.prompt, turns: tab.turns).used,
+                    contextLimit: AppLimits.contextTokenLimit,
+                    onSummarize: compressContext
+                )
+            }
         }
         .padding(14)
         .background(cardBackground, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
@@ -447,10 +466,56 @@ struct PopoutView: View {
         )
     }
 
+    private var sendStopButton: some View {
+        Button(action: {
+            if tab.isRunning {
+                stopStreaming()
+            } else {
+                submitOrQueuePrompt()
+            }
+        }) {
+            Group {
+                if tab.isRunning {
+                    Image(systemName: "stop.fill")
+                        .font(.system(size: 12, weight: .black))
+                } else {
+                    Image(systemName: "arrow.up")
+                        .font(.system(size: 15, weight: .bold))
+                }
+            }
+            .foregroundStyle(CursorTheme.textPrimary)
+            .frame(width: 36, height: 36)
+            .background {
+                if tab.isRunning {
+                    Circle().fill(CursorTheme.surfaceRaised)
+                } else {
+                    Circle().fill(CursorTheme.brandGradient)
+                }
+            }
+            .overlay(
+                Circle()
+                    .stroke(
+                        tab.isRunning
+                            ? CursorTheme.borderStrong
+                            : Color.white.opacity(0.14),
+                        lineWidth: 1
+                    )
+            )
+            .opacity(tab.isRunning || canSend ? 1 : 0.45)
+        }
+        .buttonStyle(.plain)
+        .disabled(!tab.isRunning && !canSend)
+    }
+
+    private var composerHeight: CGFloat {
+        min(132, max(56, composerTextHeight + 16))
+    }
+
     // MARK: - Helpers
 
-    private var selectedModelLabel: String {
-        AvailableModels.all.first { $0.id == selectedModel }?.label ?? selectedModel
+    private func sanitizeSelectedModel() {
+        guard AvailableModels.model(for: selectedModel) == nil else { return }
+        selectedModel = AvailableModels.autoID
     }
 
     private var cardBackground: some ShapeStyle {

@@ -1,17 +1,14 @@
 import SwiftUI
 
-// MARK: - Composer action buttons (context indicator, Summarize, Send/Stop)
+// MARK: - Composer action buttons (context indicator, Summarize) — same row as pickers
 
 struct ComposerActionButtonsView: View {
     var hasContext: Bool
     var isRunning: Bool
-    var canSend: Bool
     /// Context token usage for the small progress indicator; (used, limit). Pass (0, 0) to hide.
     var contextUsed: Int = 0
     var contextLimit: Int = 0
     var onSummarize: () -> Void
-    var onSend: () -> Void
-    var onStop: () -> Void
 
     private var contextFraction: Double {
         guard contextLimit > 0 else { return 0 }
@@ -48,45 +45,6 @@ struct ComposerActionButtonsView: View {
             }
             .buttonStyle(.plain)
             .disabled(isRunning)
-
-            Button(action: {
-                if isRunning {
-                    onStop()
-                } else {
-                    onSend()
-                }
-            }) {
-                Group {
-                    if isRunning {
-                        Image(systemName: "stop.fill")
-                            .font(.system(size: 12, weight: .black))
-                    } else {
-                        Image(systemName: "arrow.up")
-                            .font(.system(size: 15, weight: .bold))
-                    }
-                }
-                .foregroundStyle(CursorTheme.textPrimary)
-                .frame(width: 36, height: 36)
-                .background {
-                    if isRunning {
-                        Circle().fill(CursorTheme.surfaceRaised)
-                    } else {
-                        Circle().fill(CursorTheme.brandGradient)
-                    }
-                }
-                .overlay(
-                    Circle()
-                        .stroke(
-                            isRunning
-                                ? CursorTheme.borderStrong
-                                : Color.white.opacity(0.14),
-                            lineWidth: 1
-                        )
-                )
-                .opacity(isRunning || canSend ? 1 : 0.45)
-            }
-            .buttonStyle(.plain)
-            .disabled(!isRunning && !canSend)
         }
     }
 

@@ -1,5 +1,6 @@
 import SwiftUI
 import AppKit
+import Textual
 
 // MARK: - Conversation segment and turn presentation
 
@@ -17,11 +18,6 @@ func visibleSegments(for turn: ConversationTurn) -> [ConversationSegment] {
         guard !trimmed.isEmpty else { return nil }
         return segment
     }
-}
-
-private func inlineAttributedText(_ raw: String) -> AttributedString {
-    let opts = AttributedString.MarkdownParsingOptions(interpretedSyntax: .inlineOnlyPreservingWhitespace)
-    return (try? AttributedString(markdown: raw, options: opts)) ?? AttributedString(raw)
 }
 
 private func toolCallIcon(for status: ToolCallSegmentStatus) -> String {
@@ -65,11 +61,11 @@ struct ConversationSegmentView: View {
                         .font(.system(size: 12, weight: .semibold))
                         .foregroundStyle(CursorTheme.textSecondary)
                 }
-                Text(segment.text)
-                    .font(.system(size: 12, weight: .regular, design: .monospaced))
+                StructuredText(markdown: segment.text)
+                    .font(.system(size: 12))
                     .foregroundStyle(CursorTheme.textSecondary)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .textSelection(.enabled)
+                    .textual.textSelection(.enabled)
+                    .colorScheme(.dark)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(14)
@@ -79,9 +75,12 @@ struct ConversationSegmentView: View {
                     .stroke(CursorTheme.border, lineWidth: 1)
             )
         case .assistant:
-            MarkdownContentView(segment.text)
+            StructuredText(markdown: segment.text)
+                .textual.structuredTextStyle(.gitHub)
+                .foregroundStyle(CursorTheme.textPrimary)
+                .textual.textSelection(.enabled)
+                .colorScheme(.dark)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .textSelection(.enabled)
         case .toolCall:
             if let toolCall = segment.toolCall {
                 VStack(alignment: .leading, spacing: 8) {
@@ -102,11 +101,13 @@ struct ConversationSegmentView: View {
                             .background(toolCallTint(for: toolCall.status).opacity(0.14), in: Capsule())
                     }
                     if !toolCall.detail.isEmpty {
-                        Text(inlineAttributedText(toolCall.detail))
+                        InlineText(markdown: toolCall.detail)
                             .font(.system(size: 11, weight: .regular, design: .monospaced))
                             .foregroundStyle(CursorTheme.textSecondary)
+                            .textual.inlineStyle(.gitHub)
                             .fixedSize(horizontal: false, vertical: true)
-                            .textSelection(.enabled)
+                            .textual.textSelection(.enabled)
+                            .colorScheme(.dark)
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)

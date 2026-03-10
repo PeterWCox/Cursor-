@@ -55,6 +55,7 @@ struct SubmittableTextEditor: NSViewRepresentable {
     var isDisabled: Bool
     var onSubmit: () -> Void
     var onPasteImage: (() -> Void)?
+    var onHeightChange: ((CGFloat) -> Void)? = nil
 
     func makeCoordinator() -> Coordinator { Coordinator(self) }
 
@@ -71,15 +72,21 @@ struct SubmittableTextEditor: NSViewRepresentable {
         textView.isEditable = true
         textView.isSelectable = true
         textView.allowsUndo = true
-        textView.textContainerInset = NSSize(width: 4, height: 4)
+        textView.textContainerInset = NSSize(width: 4, height: 6)
         textView.isAutomaticQuoteSubstitutionEnabled = false
         textView.isAutomaticDashSubstitutionEnabled = false
         textView.isAutomaticTextReplacementEnabled = false
+        textView.isVerticallyResizable = true
+        textView.isHorizontallyResizable = false
+        textView.autoresizingMask = [.width]
+        textView.textContainer?.widthTracksTextView = true
+        textView.textContainer?.containerSize = NSSize(width: 0, height: CGFloat.greatestFiniteMagnitude)
 
         scrollView.documentView = textView
         scrollView.hasVerticalScroller = false
         scrollView.drawsBackground = false
         context.coordinator.textView = textView
+        context.coordinator.updateHeightIfNeeded(for: textView)
         return scrollView
     }
 
@@ -91,6 +98,7 @@ struct SubmittableTextEditor: NSViewRepresentable {
         }
         textView.isEditable = true
         (textView as? PasteAwareTextView)?.onPasteImage = onPasteImage
+        context.coordinator.updateHeightIfNeeded(for: textView)
     }
 
     /// Extracts an image from the pasteboard using multiple methods (NSImage, file URL, raw PNG/TIFF).
@@ -118,12 +126,24 @@ struct SubmittableTextEditor: NSViewRepresentable {
     class Coordinator: NSObject, NSTextViewDelegate {
         var parent: SubmittableTextEditor
         weak var textView: NSTextView?
+        private var lastReportedHeight: CGFloat = 0
 
         init(_ parent: SubmittableTextEditor) { self.parent = parent }
 
         func textDidChange(_ notification: Notification) {
             guard let tv = textView else { return }
             parent.text = tv.string
+            updateHeightIfNeeded(for: tv)
+        }
+
+        func textDidBeginEditing(_ notification: Notification) {
+            guard let tv = textView else { return }
+            updateHeightIfNeeded(for: tv)
+        }
+
+        func textDidEndEditing(_ notification: Notification) {
+            guard let tv = textView else { return }
+            updateHeightIfNeeded(for: tv)
         }
 
         func textView(_ textView: NSTextView, doCommandBy commandSelector: Selector) -> Bool {
@@ -136,6 +156,24 @@ struct SubmittableTextEditor: NSViewRepresentable {
                 return true
             }
             return false
+        }
+
+        func updateHeightIfNeeded(for textView: NSTextView) {
+            guard let layoutManager = textView.layoutManager,
+                  let textContainer = textView.textContainer else {
+                return
+            }
+
+            layoutManager.ensureLayout(for: textContainer)
+            let usedRect = layoutManager.usedRect(for: textContainer)
+            let contentHeight = ceil(usedRect.height + (textView.textContainerInset.height * 2))
+            let targetHeight = max(24, contentHeight)
+
+            guard abs(targetHeight - lastReportedHeight) > 0.5 else { return }
+            lastReportedHeight = targetHeight
+            DispatchQueue.main.async {
+                self.parent.onHeightChange?(targetHeight)
+            }
         }
     }
 }

@@ -17,6 +17,10 @@ enum CursorTheme {
     static let brandBlue = Color(red: 0.40, green: 0.61, blue: 1.00)
     static let brandPurple = Color(red: 0.55, green: 0.40, blue: 0.98)
     static let brandAmber = Color(red: 0.98, green: 0.76, blue: 0.31)
+    static let premiumGold = Color(red: 1.00, green: 0.84, blue: 0.39)
+    static let premiumRose = Color(red: 0.98, green: 0.50, blue: 0.71)
+    /// Bright gold for selected premium model text/icon so it’s obvious at a glance.
+    static let premiumBright = Color(red: 1.00, green: 0.92, blue: 0.55)
     static let cursorPlusTeal = Color(red: 0.0, green: 0.83, blue: 0.71)
 
     static var brandGradient: LinearGradient {
@@ -35,6 +39,23 @@ enum CursorTheme {
         )
     }
 
+    static var premiumGradient: LinearGradient {
+        LinearGradient(
+            colors: [premiumGold, premiumRose],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+    }
+
+    /// Brighter gradient for premium icon/text (gold → rose); pairs with dark background.
+    static var premiumForegroundGradient: LinearGradient {
+        LinearGradient(
+            colors: [premiumGold, Color(red: 0.98, green: 0.65, blue: 0.55), premiumRose],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+    }
+
     /// Stable color for a workspace path so the same project always gets the same colour (avoids confusion across tabs).
     static func colorForWorkspace(path: String) -> Color {
         guard !path.isEmpty else { return textTertiary }
@@ -47,19 +68,25 @@ enum CursorTheme {
     }
 }
 
+struct ModelOption: Identifiable {
+    let id: String
+    let label: String
+    let isPremium: Bool
+}
+
 /// Model options for the Cursor agent (id for CLI, label for UI).
 enum AvailableModels {
-    static let all: [(id: String, label: String)] = [
-        ("composer-1.5", "Composer 1.5"),
-        ("composer-1", "Composer 1"),
-        ("auto", "Auto"),
-        ("opus-4.6-thinking", "Claude 4.6 Opus (Thinking)"),
-        ("sonnet-4.6-thinking", "Claude 4.6 Sonnet (Thinking)"),
-        ("sonnet-4.6", "Claude 4.6 Sonnet"),
-        ("gpt-5.4-high", "GPT-5.4 High"),
-        ("gpt-5.4-medium", "GPT-5.4"),
-        ("gemini-3.1-pro", "Gemini 3.1 Pro"),
+    static let autoID = "auto"
+
+    static let all: [ModelOption] = [
+        ModelOption(id: autoID, label: "Auto", isPremium: false),
+        ModelOption(id: "gpt-5.4-medium", label: "GPT-5.4", isPremium: true),
+        ModelOption(id: "composer-1.5", label: "Composer 1.5", isPremium: true),
     ]
+
+    static func model(for id: String) -> ModelOption? {
+        all.first { $0.id == id }
+    }
 }
 
 /// Predefined quick-action prompts.

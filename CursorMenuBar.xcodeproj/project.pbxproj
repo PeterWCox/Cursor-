@@ -29,7 +29,7 @@
 		A1000020 /* ScreenshotCardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000020 /* ScreenshotCardView.swift */; };
 		A1000021 /* QuickActionCommand.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000021 /* QuickActionCommand.swift */; };
 		A1000022 /* QuickActionEditSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000022 /* QuickActionEditSheet.swift */; };
-		A1000023 /* MarkdownContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000023 /* MarkdownContentView.swift */; };
+		A1000024 /* Textual in Frameworks */ = {isa = PBXBuildFile; productRef = A8000003 /* Textual */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -56,7 +56,6 @@
 		A2000020 /* ScreenshotCardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenshotCardView.swift; sourceTree = "<group>"; };
 		A2000021 /* QuickActionCommand.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuickActionCommand.swift; sourceTree = "<group>"; };
 		A2000022 /* QuickActionEditSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuickActionEditSheet.swift; sourceTree = "<group>"; };
-		A2000023 /* MarkdownContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MarkdownContentView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -64,6 +63,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				A1000024 /* Textual in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -102,7 +102,6 @@
 				A2000020 /* ScreenshotCardView.swift */,
 				A2000021 /* QuickActionCommand.swift */,
 				A2000022 /* QuickActionEditSheet.swift */,
-				A2000023 /* MarkdownContentView.swift */,
 				A2000005 /* Assets.xcassets */,
 			);
 			path = CursorMenuBar;
@@ -132,6 +131,9 @@
 			dependencies = (
 			);
 			name = CursorMenuBar;
+			packageProductDependencies = (
+				A8000003 /* Textual */,
+			);
 			productName = CursorMenuBar;
 			productReference = A3000001 /* CursorMenuBar.app */;
 			productType = "com.apple.product-type.application";
@@ -155,6 +157,9 @@
 				Base,
 			);
 			mainGroup = A5000001;
+			packageReferences = (
+				A8000002 /* XCRemoteSwiftPackageReference "textual" */,
+			);
 			productRefGroup = A5000003 /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
@@ -201,7 +206,6 @@
 				A1000020 /* ScreenshotCardView.swift in Sources */,
 				A1000021 /* QuickActionCommand.swift in Sources */,
 				A1000022 /* QuickActionEditSheet.swift in Sources */,
-				A1000023 /* MarkdownContentView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -224,7 +228,7 @@
 					"DEBUG=1",
 					"$(inherited)",
 				);
-				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MACOSX_DEPLOYMENT_TARGET = 15.0;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
@@ -245,7 +249,7 @@
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				GCC_OPTIMIZATION_LEVEL = s;
-				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MACOSX_DEPLOYMENT_TARGET = 15.0;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				SDKROOT = macosx;
@@ -271,7 +275,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MACOSX_DEPLOYMENT_TARGET = 15.0;
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.cursormenubar.app;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -298,7 +302,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MACOSX_DEPLOYMENT_TARGET = 15.0;
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.cursormenubar.app;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -329,6 +333,25 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		A8000002 /* XCRemoteSwiftPackageReference "textual" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/gonzalezreal/textual";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 0.3.1;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		A8000003 /* Textual */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = A8000002 /* XCRemoteSwiftPackageReference "textual" */;
+			productName = Textual;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = A8000001 /* Project object */;
 }
