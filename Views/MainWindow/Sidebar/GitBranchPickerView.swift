@@ -104,56 +104,39 @@ struct GitBranchPickerView: View {
     /// Create a new branch; returns nil on success, error message otherwise. If non-nil, a "New branch…" entry is shown.
     var onCreateBranch: ((String) -> String?)? = nil
 
-    @State private var isPopoverPresented = false
     @State private var showNewBranchSheet = false
 
     var body: some View {
-        Button {
-            onOpenMenu()
-            isPopoverPresented = true
+        Menu {
+            ForEach(branches, id: \.self) { branch in
+                Button {
+                    onSelectBranch(branch)
+                } label: {
+                    if branch == currentBranch {
+                        Label(branch, systemImage: "checkmark")
+                    } else {
+                        Text(branch)
+                    }
+                }
+            }
+            if onCreateBranch != nil {
+                Divider()
+                Button {
+                    showNewBranchSheet = true
+                } label: {
+                    Label("New branch…", systemImage: "plus")
+                }
+            }
         } label: {
             pickerLabel(
                 icon: "arrow.triangle.branch",
                 title: currentBranch.isEmpty ? "No branch" : currentBranch
             )
         }
-        .buttonStyle(.plain)
+        .menuStyle(.borderlessButton)
         .foregroundColor(.white)
         .colorScheme(.dark)
         .disabled(branches.isEmpty)
-        .popover(isPresented: $isPopoverPresented, arrowEdge: .bottom) {
-            VStack(alignment: .leading, spacing: 0) {
-                ForEach(branches, id: \.self) { branch in
-                    Button {
-                        onSelectBranch(branch)
-                        isPopoverPresented = false
-                    } label: {
-                        if branch == currentBranch {
-                            Label(branch, systemImage: "checkmark")
-                        } else {
-                            Text(branch)
-                        }
-                    }
-                    .buttonStyle(.plain)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                }
-                if onCreateBranch != nil {
-                    Divider()
-                        .padding(.vertical, 6)
-                    Button {
-                        isPopoverPresented = false
-                        showNewBranchSheet = true
-                    } label: {
-                        Label("New branch…", systemImage: "plus")
-                    }
-                    .buttonStyle(.plain)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                }
-            }
-            .padding(8)
-            .frame(minWidth: 200)
-            .background(CursorTheme.surfaceMuted)
-        }
         .sheet(isPresented: $showNewBranchSheet) {
             NewBranchSheet(currentBranch: currentBranch) { name in
                 onCreateBranch?(name) ?? nil

@@ -487,12 +487,10 @@ struct PopoutView: View {
                 ZStack(alignment: .topLeading) {
                     SubmittableTextEditor(
                         text: Binding(
-                            get: { userPromptDisplayText(from: tab.prompt) },
+                            get: { tab.prompt },
                             set: { newValue in
-                                let paths = screenshotPaths(from: tab.prompt)
-                                let refs = paths.map { "\n\n[Screenshot attached: \($0)]" }.joined()
-                                tab.prompt = newValue.trimmingCharacters(in: .whitespacesAndNewlines) + refs
-                                tab.hasAttachedScreenshot = !paths.isEmpty
+                                tab.prompt = newValue
+                                tab.hasAttachedScreenshot = !screenshotPaths(from: tab.prompt).isEmpty
                             }
                         ),
                         isDisabled: false,
