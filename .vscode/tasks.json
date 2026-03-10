@@ -2,14 +2,14 @@
   "version": "2.0.0",
   "tasks": [
     {
-      "label": "Build CursorMenuBar",
+      "label": "Build Cursor+",
       "type": "shell",
       "command": "xcodebuild",
       "args": [
         "-project",
-        "${workspaceFolder}/CursorMenuBar.xcodeproj",
+        "${workspaceFolder}/Cursor+.xcodeproj",
         "-scheme",
-        "CursorMenuBar",
+        "Cursor+",
         "-configuration",
         "Debug",
         "build"
@@ -25,19 +25,19 @@
       }
     },
     {
-      "label": "Build and Run CursorMenuBar",
+      "label": "Build and Run Cursor+",
       "type": "shell",
       "command": "xcodebuild",
       "args": [
         "-project",
-        "${workspaceFolder}/CursorMenuBar.xcodeproj",
+        "${workspaceFolder}/Cursor+.xcodeproj",
         "-scheme",
-        "CursorMenuBar",
+        "Cursor+",
         "-configuration",
         "Debug",
         "build"
       ],
-      "dependsOn": "Build CursorMenuBar",
+      "dependsOn": "Build Cursor+",
       "problemMatcher": ["$xcodebuild"]
     }
   ]

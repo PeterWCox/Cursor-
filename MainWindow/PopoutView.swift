@@ -33,6 +33,10 @@ struct PopoutView: View {
     @State private var sidebarCollapsed: Bool = false
     private let sidebarWidth: CGFloat = 200
 
+    /// Tab focuses the prompt input; these are set by SubmittableTextEditor via onFocusRequested.
+    @State private var focusPromptInput: (() -> Void)?
+    @State private var isPromptFirstResponder: (() -> Bool)?
+
     /// Tabs grouped by workspace path, order preserved by first occurrence.
     private var tabGroups: [TabSidebarGroup] {
         var seen: Set<String> = []
@@ -76,10 +80,26 @@ struct PopoutView: View {
             composerDock
             }
             .frame(maxWidth: .infinity)
+            .overlay(alignment: .topLeading) {
+                PinnedQuestionsStackView(tab: tab) { turnId in
+                    var next = tab.dismissedPinnedTurnIDs
+                    next.insert(turnId)
+                    tab.dismissedPinnedTurnIDs = next
+                }
+                .padding(.top, 8)
+                .padding(.leading, 4)
+            }
         }
         .padding(16)
         .frame(minWidth: 360, maxWidth: .infinity, minHeight: 400, maxHeight: .infinity)
         .background(CursorTheme.panelGradient)
+        .onKeyPress(.tab) {
+            if isPromptFirstResponder?() == true {
+                return .ignored
+            }
+            focusPromptInput?()
+            return .handled
+        }
         .onAppear {
             sanitizeSelectedModel()
             for t in tabManager.tabs where t.workspacePath.isEmpty {
@@ -106,6 +126,12 @@ struct PopoutView: View {
         }
         .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
         .shadow(color: Color.black.opacity(0.36), radius: 28, y: 16)
+        .sheet(isPresented: Binding(
+            get: { appState.showKeyboardShortcutsSheet },
+            set: { appState.showKeyboardShortcutsSheet = $0 }
+        )) {
+            SettingsModalView()
+        }
         .overlay(
             Group {
                 Button("New Tab") {
@@ -174,6 +200,16 @@ struct PopoutView: View {
             }
 
             Spacer()
+
+            Button(action: { appState.showKeyboardShortcutsSheet = true }) {
+                Image(systemName: "gearshape")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(CursorTheme.textSecondary)
+                    .frame(width: 30, height: 30)
+                    .background(CursorTheme.surfaceMuted, in: Circle())
+            }
+            .buttonStyle(.plain)
+            .help("Keyboard shortcuts")
 
             Button(action: dismiss) {
                 Image(systemName: "xmark")
@@ -291,6 +327,63 @@ struct PopoutView: View {
         .padding(.trailing, sidebarCollapsed ? 12 : 0)
     }
 
+    // MARK: - Empty state (new tab)
+
+    private var emptyStateContent: some View {
+        let projectName = appState.workspaceDisplayName(for: tab.workspacePath).isEmpty
+            ? ((tab.workspacePath as NSString).lastPathComponent.isEmpty ? "Project" : (tab.workspacePath as NSString).lastPathComponent)
+            : appState.workspaceDisplayName(for: tab.workspacePath)
+        let modelLabel = AvailableModels.model(for: selectedModel)?.label ?? "Auto"
+        return VStack(spacing: 0) {
+                Spacer(minLength: 24)
+                VStack(spacing: 20) {
+                    Text(projectName)
+                        .font(.system(size: 22, weight: .semibold))
+                        .foregroundStyle(CursorTheme.textPrimary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+
+                    VStack(spacing: 8) {
+                        HStack(spacing: 6) {
+                            Image(systemName: "arrow.triangle.branch")
+                                .font(.system(size: 12, weight: .medium))
+                                .foregroundStyle(CursorTheme.textTertiary)
+                            Text(tab.currentBranch.isEmpty ? "No branch" : tab.currentBranch)
+                                .font(.system(size: 13, weight: .medium))
+                                .foregroundStyle(CursorTheme.textSecondary)
+                        }
+
+                        HStack(spacing: 6) {
+                            Image(systemName: "cpu")
+                                .font(.system(size: 12, weight: .medium))
+                                .foregroundStyle(CursorTheme.textTertiary)
+                            Text(modelLabel)
+                                .font(.system(size: 13, weight: .medium))
+                                .foregroundStyle(CursorTheme.textSecondary)
+                        }
+                    }
+
+                    Text("Ask a question below to start")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(CursorTheme.textTertiary)
+                        .padding(.top, 4)
+                }
+                .padding(.horizontal, 24)
+                .padding(.vertical, 28)
+                .background(
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .fill(CursorTheme.surfaceMuted.opacity(0.8))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                .stroke(CursorTheme.border, lineWidth: 1)
+                        )
+                )
+                .frame(maxWidth: 320)
+                Spacer(minLength: 24)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
     // MARK: - Output card
 
     private var outputCard: some View {
@@ -300,18 +393,7 @@ struct PopoutView: View {
             content: {
                 VStack(alignment: .leading, spacing: 18) {
                     if tab.turns.isEmpty {
-                        VStack(alignment: .leading, spacing: 10) {
-                            Text("Responses appear here")
-                                .font(.system(size: 15, weight: .semibold))
-                                .foregroundStyle(CursorTheme.textSecondary)
-
-                            Text("Ask a question below and Cursor will stream the answer into this panel.")
-                                .font(.system(size: 13, weight: .medium))
-                                .foregroundStyle(CursorTheme.textTertiary)
-                                .fixedSize(horizontal: false, vertical: true)
-                        }
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.top, 4)
+                        emptyStateContent
                     } else {
                         ForEach(tab.turns) { turn in
                             ConversationTurnView(turn: turn)
@@ -368,6 +450,10 @@ struct PopoutView: View {
                         onPasteImage: pasteScreenshot,
                         onHeightChange: { newHeight in
                             composerTextHeight = newHeight
+                        },
+                        onFocusRequested: { focus, isFirstResponder in
+                            focusPromptInput = focus
+                            isPromptFirstResponder = isFirstResponder
                         }
                     )
                     .frame(height: composerHeight)
@@ -401,13 +487,15 @@ struct PopoutView: View {
                     folders: devFolders,
                     selectedPath: tab.workspacePath,
                     onSelectFolder: { path in
-                        tab.workspacePath = path
+                        tabManager.addTab(lastWorkspacePath: path)
                         workspacePath = path
                         appState.workspacePath = path
                     },
                     onBrowse: {
                         appState.changeWorkspace { path in
-                            tab.workspacePath = path
+                            tabManager.addTab(lastWorkspacePath: path)
+                            workspacePath = path
+                            appState.workspacePath = path
                         }
                     },
                     onAppear: { devFolders = loadDevFolders() }

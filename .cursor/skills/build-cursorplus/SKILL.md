@@ -1,19 +1,19 @@
 ---
-name: build-cursormenubar
-description: Build the Cursor Menu Bar macOS app using xcodebuild. Use when the user wants to build, compile, or run the CursorMenuBar app.
+name: build-cursorplus
+description: Build the Cursor+ macOS app using xcodebuild. Use when the user wants to build, compile, or run the Cursor+ app.
 disable-model-invocation: true
 ---
 
-# Build CursorMenuBar
+# Build Cursor+
 
-Build the Cursor Menu Bar app for macOS.
+Build the Cursor+ app for macOS.
 
 ## Instructions
 
-1. Run this command from the project root (`/Users/petercox/dev/cursor-macosapp`):
+1. Run this command from the project root:
 
    ```bash
-   xcodebuild -project CursorMenuBar.xcodeproj -scheme CursorMenuBar -configuration Debug build
+   xcodebuild -project "Cursor+.xcodeproj" -scheme "Cursor+" -configuration Debug build
    ```
 
 2. Ensure Xcode is set as the active developer directory. If you get "requires Xcode" errors, the user must run:

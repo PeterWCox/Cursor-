@@ -98,7 +98,7 @@ def draw_icon(size: int) -> Image.Image:
 def main():
     script_dir = Path(__file__).resolve().parent
     project_root = script_dir.parent
-    appiconset = project_root / "CursorMenuBar" / "Assets.xcassets" / "AppIcon.appiconset"
+    appiconset = project_root / "Cursor+" / "Assets.xcassets" / "AppIcon.appiconset"
     appiconset.mkdir(parents=True, exist_ok=True)
 
     # macOS AppIcon sizes: (size, scale) -> pixel dimension

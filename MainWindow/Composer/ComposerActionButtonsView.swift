@@ -29,18 +29,16 @@ struct ComposerActionButtonsView: View {
                     Text("Summarize")
                 }
                 .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(hasContext ? CursorTheme.textPrimary : CursorTheme.textSecondary)
+                .foregroundStyle(CursorTheme.brandAmber)
                 .padding(.horizontal, 12)
                 .padding(.vertical, 8)
                 .background(
-                    hasContext
-                        ? CursorTheme.surfaceRaised
-                        : CursorTheme.surfaceMuted,
+                    CursorTheme.brandAmber.opacity(0.18),
                     in: Capsule()
                 )
                 .overlay(
                     Capsule()
-                        .stroke(CursorTheme.border, lineWidth: 1)
+                        .stroke(CursorTheme.brandAmber.opacity(0.4), lineWidth: 1)
                 )
             }
             .buttonStyle(.plain)

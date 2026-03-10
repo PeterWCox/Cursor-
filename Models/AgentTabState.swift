@@ -83,6 +83,9 @@ class AgentTab: ObservableObject, Identifiable {
     /// Set to true before sending so the next sendPrompt() marks that run as compress (used by Summarize button).
     var isCompressRequest: Bool = false
 
+    /// Turn IDs the user has dismissed from the pinned-questions stack (not persisted).
+    @Published var dismissedPinnedTurnIDs: Set<UUID> = []
+
     init(title: String = "Agent", workspacePath: String = "") {
         self.id = UUID()
         self.title = title

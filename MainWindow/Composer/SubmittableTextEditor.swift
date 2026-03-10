@@ -56,6 +56,8 @@ struct SubmittableTextEditor: NSViewRepresentable {
     var onSubmit: () -> Void
     var onPasteImage: (() -> Void)?
     var onHeightChange: ((CGFloat) -> Void)? = nil
+    /// Called once with (focusClosure, isFirstResponderClosure) so the host can focus this field (e.g. on Tab) and check if it already has focus.
+    var onFocusRequested: (((@escaping () -> Void), (@escaping () -> Bool)) -> Void)? = nil
 
     func makeCoordinator() -> Coordinator { Coordinator(self) }
 
@@ -99,6 +101,19 @@ struct SubmittableTextEditor: NSViewRepresentable {
         textView.isEditable = true
         (textView as? PasteAwareTextView)?.onPasteImage = onPasteImage
         context.coordinator.updateHeightIfNeeded(for: textView)
+
+        if let callback = onFocusRequested, !context.coordinator.didSendFocusCallbacks {
+            context.coordinator.didSendFocusCallbacks = true
+            let focusClosure: () -> Void = { [weak scrollView] in
+                guard let sv = scrollView, let tv = sv.documentView as? NSTextView else { return }
+                sv.window?.makeFirstResponder(tv)
+            }
+            let isFirstResponderClosure: () -> Bool = { [weak scrollView] in
+                guard let sv = scrollView, let tv = sv.documentView as? NSTextView else { return false }
+                return sv.window?.firstResponder === tv
+            }
+            callback(focusClosure, isFirstResponderClosure)
+        }
     }
 
     /// Extracts an image from the pasteboard using multiple methods (NSImage, file URL, raw PNG/TIFF).
@@ -127,6 +142,7 @@ struct SubmittableTextEditor: NSViewRepresentable {
         var parent: SubmittableTextEditor
         weak var textView: NSTextView?
         private var lastReportedHeight: CGFloat = 0
+        var didSendFocusCallbacks: Bool = false
 
         init(_ parent: SubmittableTextEditor) { self.parent = parent }
 

@@ -7,7 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		A1000001 /* CursorMenuBarApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000001 /* CursorMenuBarApp.swift */; };
+		A1000001 /* CursorPlusApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000001 /* CursorPlusApp.swift */; };
 		A1000002 /* PopoutView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000002 /* PopoutView.swift */; };
 		A1000003 /* AgentRunner.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000003 /* AgentRunner.swift */; };
 		A1000004 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000004 /* SettingsView.swift */; };
@@ -29,12 +29,15 @@
 		A1000020 /* ScreenshotCardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000020 /* ScreenshotCardView.swift */; };
 		A1000021 /* QuickActionCommand.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000021 /* QuickActionCommand.swift */; };
 		A1000022 /* QuickActionEditSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000022 /* QuickActionEditSheet.swift */; };
+		A1000023 /* KeyboardShortcutsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000023 /* KeyboardShortcutsView.swift */; };
+		A1000026 /* SettingsModalView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000026 /* SettingsModalView.swift */; };
+		A1000025 /* PinnedQuestionsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000025 /* PinnedQuestionsView.swift */; };
 		A1000024 /* Textual in Frameworks */ = {isa = PBXBuildFile; productRef = A8000003 /* Textual */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
-		A3000001 /* CursorMenuBar.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = CursorMenuBar.app; sourceTree = BUILT_PRODUCTS_DIR; };
-		A2000001 /* CursorMenuBarApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CursorMenuBarApp.swift; sourceTree = "<group>"; };
+		A3000001 /* Cursor+.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Cursor+.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		A2000001 /* CursorPlusApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CursorPlusApp.swift; sourceTree = "<group>"; };
 		A2000002 /* PopoutView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PopoutView.swift; sourceTree = "<group>"; };
 		A2000003 /* AgentRunner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentRunner.swift; sourceTree = "<group>"; };
 		A2000004 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
@@ -56,6 +59,9 @@
 		A2000020 /* ScreenshotCardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenshotCardView.swift; sourceTree = "<group>"; };
 		A2000021 /* QuickActionCommand.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuickActionCommand.swift; sourceTree = "<group>"; };
 		A2000022 /* QuickActionEditSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuickActionEditSheet.swift; sourceTree = "<group>"; };
+		A2000023 /* KeyboardShortcutsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyboardShortcutsView.swift; sourceTree = "<group>"; };
+		A2000026 /* SettingsModalView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsModalView.swift; sourceTree = "<group>"; };
+		A2000025 /* PinnedQuestionsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PinnedQuestionsView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -73,44 +79,143 @@
 		A5000001 = {
 			isa = PBXGroup;
 			children = (
-				A5000002 /* CursorMenuBar */,
+				A5000002 /* Cursor+ */,
 				A5000003 /* Products */,
 			);
 			sourceTree = "<group>";
 		};
-		A5000002 /* CursorMenuBar */ = {
+		A5000002 /* Cursor+ */ = {
 			isa = PBXGroup;
 			children = (
-				A2000001 /* CursorMenuBarApp.swift */,
-				A2000002 /* PopoutView.swift */,
-				A2000003 /* AgentRunner.swift */,
-				A2000004 /* SettingsView.swift */,
-				A2000006 /* ConversationModels.swift */,
-				A2000007 /* CursorTheme.swift */,
-				A2000008 /* WorkspaceHelpers.swift */,
-				A2000009 /* AgentTabState.swift */,
-				A2000010 /* SubmittableTextEditor.swift */,
-				A2000011 /* BrandMark.swift */,
-				A2000012 /* TabChip.swift */,
-				A2000013 /* OutputScrollView.swift */,
-				A2000014 /* ConversationViews.swift */,
-				A2000015 /* QuickActionButtonsView.swift */,
-				A2000016 /* WorkspacePickerView.swift */,
-				A2000017 /* ModelPickerView.swift */,
-				A2000018 /* GitBranchPickerView.swift */,
-				A2000019 /* ComposerActionButtonsView.swift */,
-				A2000020 /* ScreenshotCardView.swift */,
-				A2000021 /* QuickActionCommand.swift */,
-				A2000022 /* QuickActionEditSheet.swift */,
+				A5000010 /* App */,
+				A5000011 /* MainWindow */,
+				A5000016 /* Settings */,
+				A5000017 /* QuickActions */,
+				A5000018 /* Models */,
+				A5000019 /* Services */,
+				A5000020 /* Theme */,
+				A5000021 /* Helpers */,
 				A2000005 /* Assets.xcassets */,
 			);
-			path = CursorMenuBar;
+			path = ".";
+			sourceTree = "<group>";
+		};
+		A5000010 /* App */ = {
+			isa = PBXGroup;
+			children = (
+				A2000001 /* CursorPlusApp.swift */,
+			);
+			path = App;
+			sourceTree = "<group>";
+		};
+		A5000011 /* MainWindow */ = {
+			isa = PBXGroup;
+			children = (
+				A2000002 /* PopoutView.swift */,
+				A5000012 /* Sidebar */,
+				A5000013 /* TopBar */,
+				A5000014 /* Composer */,
+				A5000015 /* Output */,
+			);
+			path = MainWindow;
+			sourceTree = "<group>";
+		};
+		A5000012 /* Sidebar */ = {
+			isa = PBXGroup;
+			children = (
+				A2000012 /* TabChip.swift */,
+				A2000016 /* WorkspacePickerView.swift */,
+				A2000018 /* GitBranchPickerView.swift */,
+			);
+			path = Sidebar;
+			sourceTree = "<group>";
+		};
+		A5000013 /* TopBar */ = {
+			isa = PBXGroup;
+			children = (
+				A2000011 /* BrandMark.swift */,
+				A2000017 /* ModelPickerView.swift */,
+				A2000015 /* QuickActionButtonsView.swift */,
+			);
+			path = TopBar;
+			sourceTree = "<group>";
+		};
+		A5000014 /* Composer */ = {
+			isa = PBXGroup;
+			children = (
+				A2000010 /* SubmittableTextEditor.swift */,
+				A2000019 /* ComposerActionButtonsView.swift */,
+				A2000025 /* PinnedQuestionsView.swift */,
+			);
+			path = Composer;
+			sourceTree = "<group>";
+		};
+		A5000015 /* Output */ = {
+			isa = PBXGroup;
+			children = (
+				A2000013 /* OutputScrollView.swift */,
+				A2000014 /* ConversationViews.swift */,
+				A2000020 /* ScreenshotCardView.swift */,
+			);
+			path = Output;
+			sourceTree = "<group>";
+		};
+		A5000016 /* Settings */ = {
+			isa = PBXGroup;
+			children = (
+				A2000004 /* SettingsView.swift */,
+				A2000026 /* SettingsModalView.swift */,
+				A2000023 /* KeyboardShortcutsView.swift */,
+			);
+			path = Settings;
+			sourceTree = "<group>";
+		};
+		A5000017 /* QuickActions */ = {
+			isa = PBXGroup;
+			children = (
+				A2000021 /* QuickActionCommand.swift */,
+				A2000022 /* QuickActionEditSheet.swift */,
+			);
+			path = QuickActions;
+			sourceTree = "<group>";
+		};
+		A5000018 /* Models */ = {
+			isa = PBXGroup;
+			children = (
+				A2000006 /* ConversationModels.swift */,
+				A2000009 /* AgentTabState.swift */,
+			);
+			path = Models;
+			sourceTree = "<group>";
+		};
+		A5000019 /* Services */ = {
+			isa = PBXGroup;
+			children = (
+				A2000003 /* AgentRunner.swift */,
+			);
+			path = Services;
+			sourceTree = "<group>";
+		};
+		A5000020 /* Theme */ = {
+			isa = PBXGroup;
+			children = (
+				A2000007 /* CursorTheme.swift */,
+			);
+			path = Theme;
+			sourceTree = "<group>";
+		};
+		A5000021 /* Helpers */ = {
+			isa = PBXGroup;
+			children = (
+				A2000008 /* WorkspaceHelpers.swift */,
+			);
+			path = Helpers;
 			sourceTree = "<group>";
 		};
 		A5000003 /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				A3000001 /* CursorMenuBar.app */,
+				A3000001 /* Cursor+.app */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -118,9 +223,9 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
-		A6000001 /* CursorMenuBar */ = {
+		A6000001 /* Cursor+ */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = A7000003 /* Build configuration list for PBXNativeTarget "CursorMenuBar" */;
+			buildConfigurationList = A7000003 /* Build configuration list for PBXNativeTarget "Cursor+" */;
 			buildPhases = (
 				A6000002 /* Sources */,
 				A4000001 /* Frameworks */,
@@ -130,12 +235,12 @@
 			);
 			dependencies = (
 			);
-			name = CursorMenuBar;
+			name = "Cursor+";
 			packageProductDependencies = (
 				A8000003 /* Textual */,
 			);
-			productName = CursorMenuBar;
-			productReference = A3000001 /* CursorMenuBar.app */;
+			productName = "Cursor+";
+			productReference = A3000001 /* Cursor+.app */;
 			productType = "com.apple.product-type.application";
 		};
 /* End PBXNativeTarget section */
@@ -148,7 +253,7 @@
 				LastSwiftUpdateCheck = 1500;
 				LastUpgradeCheck = 1500;
 			};
-			buildConfigurationList = A7000001 /* Build configuration list for PBXProject "CursorMenuBar" */;
+			buildConfigurationList = A7000001 /* Build configuration list for PBXProject "Cursor+" */;
 			compatibilityVersion = "Xcode 14.0";
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
@@ -164,7 +269,7 @@
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
-				A6000001 /* CursorMenuBar */,
+				A6000001 /* Cursor+ */,
 			);
 		};
 /* End PBXProject section */
@@ -185,7 +290,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				A1000001 /* CursorMenuBarApp.swift in Sources */,
+				A1000001 /* CursorPlusApp.swift in Sources */,
 				A1000002 /* PopoutView.swift in Sources */,
 				A1000003 /* AgentRunner.swift in Sources */,
 				A1000004 /* SettingsView.swift in Sources */,
@@ -206,6 +311,9 @@
 				A1000020 /* ScreenshotCardView.swift in Sources */,
 				A1000021 /* QuickActionCommand.swift in Sources */,
 				A1000022 /* QuickActionEditSheet.swift in Sources */,
+				A1000023 /* KeyboardShortcutsView.swift in Sources */,
+				A1000026 /* SettingsModalView.swift in Sources */,
+				A1000025 /* PinnedQuestionsView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -269,7 +377,7 @@
 				DEVELOPMENT_ASSET_PATHS = "";
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = NO;
-				INFOPLIST_FILE = CursorMenuBar/Info.plist;
+				INFOPLIST_FILE = Info.plist;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -277,7 +385,7 @@
 				);
 				MACOSX_DEPLOYMENT_TARGET = 15.0;
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.cursormenubar.app;
+				PRODUCT_BUNDLE_IDENTIFIER = com.cursorplus.app;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
@@ -296,7 +404,7 @@
 				DEVELOPMENT_ASSET_PATHS = "";
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = NO;
-				INFOPLIST_FILE = CursorMenuBar/Info.plist;
+				INFOPLIST_FILE = Info.plist;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -304,7 +412,7 @@
 				);
 				MACOSX_DEPLOYMENT_TARGET = 15.0;
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.cursormenubar.app;
+				PRODUCT_BUNDLE_IDENTIFIER = com.cursorplus.app;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
@@ -314,7 +422,7 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		A7000001 /* Build configuration list for PBXProject "CursorMenuBar" */ = {
+		A7000001 /* Build configuration list for PBXProject "Cursor+" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				A9000001 /* Debug */,
@@ -323,7 +431,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		A7000003 /* Build configuration list for PBXNativeTarget "CursorMenuBar" */ = {
+		A7000003 /* Build configuration list for PBXNativeTarget "Cursor+" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				A9000003 /* Debug */,

@@ -66,7 +66,7 @@ enum BrandStatusIcon {
 }
 
 @main
-struct CursorMenuBarApp: App {
+struct CursorPlusApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
 
     var body: some Scene {
@@ -130,6 +130,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         image.accessibilityDescription = "Cursor+"
 
         let menu = NSMenu()
+        let shortcutsItem = NSMenuItem(title: "Keyboard Shortcuts…", action: #selector(showKeyboardShortcuts), keyEquivalent: "")
+        shortcutsItem.target = self
+        menu.addItem(shortcutsItem)
+        menu.addItem(NSMenuItem.separator())
         let quitItem = NSMenuItem(title: "Quit Cursor+", action: #selector(quitApp), keyEquivalent: "q")
         quitItem.target = self
         menu.addItem(quitItem)
@@ -162,6 +166,13 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             positionNearStatusItem()
             panel.makeKeyAndOrderFront(nil)
         }
+    }
+
+    @objc func showKeyboardShortcuts() {
+        if !panel.isVisible {
+            togglePanel()
+        }
+        appState.showKeyboardShortcutsSheet = true
     }
 
     @objc func quitApp() {
@@ -216,6 +227,7 @@ class FloatingPanel: NSPanel {
 
 class AppState: ObservableObject {
     @AppStorage("workspacePath") var workspacePath: String = FileManager.default.homeDirectoryForCurrentUser.path
+    @Published var showKeyboardShortcutsSheet: Bool = false
     let tabManager = TabManager(loadedState: TabManagerPersistence.load())
 
     func saveTabState() {
