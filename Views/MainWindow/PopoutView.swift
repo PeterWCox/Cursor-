@@ -159,6 +159,16 @@ struct PopoutView: View {
         NSWorkspace.shared.open(githubURL)
     }
 
+    private func runGitInit(workspacePath path: String) {
+        guard gitInit(workspacePath: path) == nil else { return }
+        if path == tabManager.activeProjectPath, let active = tabManager.activeTab {
+            let (cur, list) = loadGitBranches(workspacePath: path)
+            currentBranch = cur
+            gitBranches = list
+            active.currentBranch = cur
+        }
+    }
+
     private func confirmCloseTab() {
         guard let id = closeTabConfirmationTabID else { return }
         if let tabToClose = tabManager.tabs.first(where: { $0.id == id }) {
@@ -389,6 +399,13 @@ struct PopoutView: View {
                 .opacity(0)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
 
+                Button("New Agent") {
+                    addNewAgentTab()
+                }
+                .keyboardShortcut("n", modifiers: .command)
+                .opacity(0)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+
                 Button("Reopen Closed Tab") {
                     if tabManager.reopenLastClosedTab(), appState.isMainContentCollapsed {
                         withAnimation(.easeInOut(duration: 0.2)) { appState.isMainContentCollapsed = false }
@@ -496,11 +513,15 @@ struct PopoutView: View {
                         Label("Minimise", systemImage: "minus")
                     }
                 } label: {
-                    Image(systemName: "ellipsis")
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(CursorTheme.textSecondary)
-                        .frame(width: 30, height: 30)
-                        .background(CursorTheme.surfaceMuted, in: Circle())
+                    VStack(spacing: 3) {
+                        ForEach(0..<3, id: \.self) { _ in
+                            Circle()
+                                .fill(Color.white)
+                                .frame(width: 4, height: 4)
+                        }
+                    }
+                    .frame(width: 30, height: 30)
+                    .background(CursorTheme.surfaceMuted, in: Circle())
                 }
                 .menuStyle(.borderlessButton)
                 .menuIndicator(.hidden)
@@ -621,23 +642,32 @@ struct PopoutView: View {
                                     Button("Open in Cursor") {
                                         openProjectInCursor(group.path)
                                     }
-                                    Button("Open in GitHub") {
-                                        openProjectOnGitHub(group.path)
+                                    if gitHubRepositoryURL(workspacePath: group.path) != nil {
+                                        Button("Open in GitHub") {
+                                            openProjectOnGitHub(group.path)
+                                        }
+                                    } else if !isGitRepository(workspacePath: group.path) {
+                                        Button("Git Init") {
+                                            runGitInit(workspacePath: group.path)
+                                        }
                                     }
                                     Divider()
                                     Button("Remove Project", role: .destructive) {
                                         removeProject(workspacePath: group.path)
                                     }
                                 } label: {
-                                    Image(systemName: "ellipsis")
-                                        .font(.system(size: 10, weight: .semibold))
-                                        .rotationEffect(.degrees(90))
-                                        .symbolRenderingMode(.monochrome)
-                                        .foregroundStyle(CursorTheme.textPrimary)
-                                        .frame(width: 20, height: 20)
-                                        .contentShape(Rectangle())
+                                    VStack(spacing: 2) {
+                                        ForEach(0..<3, id: \.self) { _ in
+                                            Circle()
+                                                .fill(Color.white)
+                                                .frame(width: 3, height: 3)
+                                        }
+                                    }
+                                    .frame(width: 20, height: 20)
+                                    .contentShape(Rectangle())
                                 }
                                 .menuStyle(.borderlessButton)
+                                .menuIndicator(.hidden)
                                 .help("Project options")
                             }
                             if !isCollapsed {
@@ -688,13 +718,16 @@ struct PopoutView: View {
             }
             .frame(maxHeight: .infinity)
 
-                            Button(action: addProject) {
+                            Button(action: { addNewAgentTab() }) {
                                 HStack(spacing: 8) {
-                                    Image(systemName: "folder.badge.plus")
+                                    Image(systemName: "plus.bubble.fill")
                                         .font(.system(size: 12, weight: .semibold))
-                                    Text("Add Project")
+                                    Text("New Agent")
                                         .font(.system(size: 13, weight: .medium))
                                     Spacer(minLength: 4)
+                                    Text("⌘T")
+                                        .font(.system(size: 11, weight: .medium))
+                                        .foregroundStyle(CursorTheme.textTertiary)
                                 }
                                 .foregroundStyle(CursorTheme.textSecondary)
                                 .padding(.horizontal, 12)
@@ -707,7 +740,8 @@ struct PopoutView: View {
                                 )
                             }
                             .buttonStyle(.plain)
-                            .help("Add a project folder")
+                            .keyboardShortcut("t", modifiers: .command)
+                            .help("New agent tab (⌘T)")
             .padding(.top, 10)
         }
         .padding(.horizontal, Self.sidebarContentPadding)
@@ -1019,7 +1053,7 @@ struct PopoutView: View {
                     .frame(height: composerHeight)
 
                     if userPromptDisplayText(from: tab.prompt).isEmpty {
-                        Text("Send message and/or ⌘V to paste one or more screenshots from clipboard. Press Enter to submit and Shift+Enter for new line.")
+                        Text("Send message and/or ⌘V to paste one or more screenshots from clipboard. Press Enter to submit and ⇧Enter for new line.")
                             .font(.system(size: 13, weight: .regular, design: .monospaced))
                             .foregroundStyle(CursorTheme.textTertiary)
                             .padding(.leading, 4)
@@ -1476,15 +1510,19 @@ struct PopoutView: View {
                 var flushTask: Task<Void, Never>?
                 let flushIntervalNs: UInt64 = 100_000_000 // 100ms
                 func flushBatched() {
-                    if !thinkingBuffer.isEmpty {
-                        appendThinkingText(thinkingBuffer, to: turnID, in: currentTab)
-                        thinkingBuffer = ""
+                    let thinking = thinkingBuffer
+                    let assistant = assistantBuffer
+                    thinkingBuffer = ""
+                    assistantBuffer = ""
+                    Task { @MainActor in
+                        if !thinking.isEmpty {
+                            appendThinkingText(thinking, to: turnID, in: currentTab)
+                        }
+                        if !assistant.isEmpty {
+                            mergeAssistantText(assistant, into: currentTab, turnID: turnID)
+                        }
+                        requestAutoScroll(for: currentTab)
                     }
-                    if !assistantBuffer.isEmpty {
-                        mergeAssistantText(assistantBuffer, into: currentTab, turnID: turnID)
-                        assistantBuffer = ""
-                    }
-                    requestAutoScroll(for: currentTab)
                 }
                 func scheduleFlush() {
                     flushTask?.cancel()

@@ -90,22 +90,50 @@ struct SettingsModalView: View {
         Group {
             switch selectedPane {
             case .general:
-                GeneralSettingsPaneView()
+                SettingsPaneContainer(title: SettingsPane.general.rawValue) {
+                    GeneralSettingsPaneContent()
+                }
             case .models:
-                ModelsSettingsPaneView()
+                SettingsPaneContainer(title: SettingsPane.models.rawValue) {
+                    ModelsSettingsPaneContent()
+                }
             case .keyboardShortcuts:
-                KeyboardShortcutsContentView()
+                SettingsPaneContainer(title: SettingsPane.keyboardShortcuts.rawValue) {
+                    KeyboardShortcutsContentView()
+                }
             case .about:
-                AboutPaneView()
+                SettingsPaneContainer(title: SettingsPane.about.rawValue) {
+                    AboutPaneContent()
+                }
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }
 
+// MARK: - Settings pane container (title + scroll + padding)
+
+private struct SettingsPaneContainer<Content: View>: View {
+    let title: String
+    @ViewBuilder let content: () -> Content
+
+    var body: some View {
+        ScrollView(.vertical, showsIndicators: true) {
+            VStack(alignment: .leading, spacing: 24) {
+                Text(title)
+                    .font(.system(size: 17, weight: .semibold))
+                    .foregroundStyle(CursorTheme.textPrimary)
+                content()
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(24)
+        }
+    }
+}
+
 // MARK: - General pane
 
-private struct GeneralSettingsPaneView: View {
+private struct GeneralSettingsPaneContent: View {
     @AppStorage(AppPreferences.projectsRootPathKey) private var projectsRootPath: String = AppPreferences.defaultProjectsRootPath
 
     private var resolvedProjectsRootPath: String {
@@ -113,10 +141,9 @@ private struct GeneralSettingsPaneView: View {
     }
 
     var body: some View {
-        ScrollView(.vertical, showsIndicators: true) {
-            VStack(alignment: .leading, spacing: 24) {
-                VStack(alignment: .leading, spacing: 12) {
-                    Text("Project picker root")
+        VStack(alignment: .leading, spacing: 24) {
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Project picker root")
                         .font(.system(size: 11, weight: .semibold))
                         .foregroundStyle(CursorTheme.textTertiary)
                         .textCase(.uppercase)
@@ -171,9 +198,7 @@ private struct GeneralSettingsPaneView: View {
                         .textSelection(.enabled)
                 }
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(24)
-        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private func selectProjectsRootFolder() {
@@ -194,15 +219,14 @@ private struct GeneralSettingsPaneView: View {
 
 // MARK: - Models pane
 
-private struct ModelsSettingsPaneView: View {
+private struct ModelsSettingsPaneContent: View {
     @EnvironmentObject var appState: AppState
     @AppStorage(AppPreferences.disabledModelIdsKey) private var disabledModelIdsRaw: String = AppPreferences.defaultDisabledModelIdsRaw
 
     var body: some View {
-        ScrollView(.vertical, showsIndicators: true) {
-            VStack(alignment: .leading, spacing: 24) {
-                VStack(alignment: .leading, spacing: 12) {
-                    Text("Model picker")
+        VStack(alignment: .leading, spacing: 24) {
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Model picker")
                         .font(.system(size: 11, weight: .semibold))
                         .foregroundStyle(CursorTheme.textTertiary)
                         .textCase(.uppercase)
@@ -224,6 +248,7 @@ private struct ModelsSettingsPaneView: View {
                         }
                         .buttonStyle(.bordered)
                     }
+                    .tint(CursorTheme.brandBlue)
 
                     VStack(alignment: .leading, spacing: 0) {
                         ForEach(appState.availableModels, id: \.id) { model in
@@ -267,66 +292,45 @@ private struct ModelsSettingsPaneView: View {
                     )
                 }
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(24)
-        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 
-// MARK: - About pane (placeholder + GitHub)
+// MARK: - About pane
 
-private struct AboutPaneView: View {
+private struct AboutPaneContent: View {
     private let githubURL = "https://github.com/cursor-macosapp/cursor-macosapp"
 
     var body: some View {
-        ScrollView(.vertical, showsIndicators: true) {
-            VStack(alignment: .leading, spacing: 20) {
-                HStack(alignment: .top, spacing: 12) {
-                    Image("CursorMetroLogo")
-                        .resizable()
-                        .aspectRatio(contentMode: .fit)
-                        .frame(height: 44)
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text("Cursor+")
-                            .font(.system(size: 22, weight: .semibold, design: .monospaced))
-                            .foregroundStyle(CursorTheme.textPrimary)
-                        Text("A menu bar companion for Cursor.")
-                            .font(.system(size: 14))
-                            .foregroundStyle(CursorTheme.textSecondary)
-                    }
+        VStack(alignment: .leading, spacing: 20) {
+            Text("Cursor+ is a native macOS menu bar app that works alongside Cursor. It gives you quick access to projects, composer, and Cursor features from the menu bar—open workspaces, jump into chat, or pop out the composer without switching apps.")
+                .font(.system(size: 14))
+                .foregroundStyle(CursorTheme.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            Image("CursorMetroLogo")
+                .resizable()
+                .aspectRatio(contentMode: .fit)
+                .frame(height: 44)
+
+            Text("GitHub")
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(CursorTheme.textTertiary)
+                .textCase(.uppercase)
+                .tracking(0.6)
+
+            Link(destination: URL(string: githubURL)!) {
+                HStack(spacing: 8) {
+                    Image(systemName: "link")
+                        .font(.system(size: 14))
+                    Text(githubURL)
+                        .font(.system(size: 14, weight: .medium))
                 }
-
-                Text("About this app")
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(CursorTheme.textTertiary)
-                    .textCase(.uppercase)
-                    .tracking(0.6)
-
-                Text("Cursor+ is a native macOS menu bar app that works alongside Cursor. It gives you quick access to projects, composer, and Cursor features from the menu bar—open workspaces, jump into chat, or pop out the composer without switching apps.")
-                    .font(.system(size: 14))
-                    .foregroundStyle(CursorTheme.textSecondary)
-                    .fixedSize(horizontal: false, vertical: true)
-
-                Text("GitHub")
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(CursorTheme.textTertiary)
-                    .textCase(.uppercase)
-                    .tracking(0.6)
-
-                Link(destination: URL(string: githubURL)!) {
-                    HStack(spacing: 8) {
-                        Image(systemName: "link")
-                            .font(.system(size: 14))
-                        Text(githubURL)
-                            .font(.system(size: 14, weight: .medium))
-                    }
-                    .foregroundStyle(CursorTheme.brandBlue)
-                }
-                .buttonStyle(.plain)
+                .foregroundStyle(CursorTheme.brandBlue)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(24)
+            .buttonStyle(.plain)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 

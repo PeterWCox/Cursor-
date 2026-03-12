@@ -13,7 +13,7 @@ private struct ShortcutRow: Identifiable {
 struct KeyboardShortcutsContentView: View {
     private static let sections: [(title: String, rows: [ShortcutRow])] = [
         ("Tabs", [
-            ShortcutRow(keys: ["⌘T", "⌘N"], action: "New agent (same project)"),
+            ShortcutRow(keys: ["⌘N", "⌘T"], action: "New agent (same project)"),
             ShortcutRow(keys: ["⌘P", "⌘O"], action: "Add project"),
             ShortcutRow(keys: ["⌘W"], action: "Close tab"),
             ShortcutRow(keys: ["⌘⇧T"], action: "Reopen closed tab"),
@@ -35,16 +35,13 @@ struct KeyboardShortcutsContentView: View {
     ]
 
     var body: some View {
-        ScrollView(.vertical, showsIndicators: true) {
-            VStack(alignment: .leading, spacing: 24) {
-                comingSoonBanner
-                ForEach(Self.sections, id: \.title) { section in
-                    KeyboardShortcutsContentView.sectionView(title: section.title, rows: section.rows)
-                }
+        VStack(alignment: .leading, spacing: 24) {
+            comingSoonBanner
+            ForEach(Self.sections, id: \.title) { section in
+                KeyboardShortcutsContentView.sectionView(title: section.title, rows: section.rows)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(24)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private var comingSoonBanner: some View {
@@ -123,7 +120,10 @@ struct KeyboardShortcutsView: View {
             Divider()
                 .background(CursorTheme.border)
                 .padding(.horizontal, 24)
-            KeyboardShortcutsContentView()
+            ScrollView(.vertical, showsIndicators: true) {
+                KeyboardShortcutsContentView()
+                    .padding(24)
+            }
         }
         .frame(width: 420, height: 440)
         .background(CursorTheme.surface)

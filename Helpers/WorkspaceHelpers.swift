@@ -206,22 +206,64 @@ func gitCreateBranch(name: String, workspacePath: String) -> String? {
     return err.trimmingCharacters(in: .whitespacesAndNewlines)
 }
 
-/// Returns the GitHub repository web URL (https://github.com/owner/repo) if the workspace has a GitHub remote; nil otherwise.
-func gitHubRepositoryURL(workspacePath: String) -> URL? {
+/// Returns true if the workspace path is inside a Git repository.
+func isGitRepository(workspacePath: String) -> Bool {
+    let dir = URL(fileURLWithPath: workspacePath)
+    guard (try? dir.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true else { return false }
+
+    let gitPath = dir.appendingPathComponent(".git", isDirectory: false)
+    if (try? gitPath.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true {
+        return true
+    }
+
+    guard FileManager.default.fileExists(atPath: gitPath.path),
+          let content = try? String(contentsOf: gitPath, encoding: .utf8) else {
+        return false
+    }
+
+    return content.trimmingCharacters(in: .whitespacesAndNewlines).hasPrefix("gitdir:")
+}
+
+/// Run `git init` in the workspace. Returns nil on success, error message otherwise.
+func gitInit(workspacePath: String) -> String? {
     let url = URL(fileURLWithPath: workspacePath)
-    guard (try? url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true else { return nil }
+    guard (try? url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true else { return "Path is not a directory." }
     let process = Process()
     process.executableURL = URL(fileURLWithPath: "/usr/bin/git")
-    process.arguments = ["remote", "get-url", "origin"]
+    process.arguments = ["init"]
     process.currentDirectoryURL = url
-    let pipe = Pipe()
-    process.standardOutput = pipe
-    process.standardError = FileHandle.nullDevice
-    guard (try? process.run()) != nil else { return nil }
+    let errPipe = Pipe()
+    process.standardError = errPipe
+    guard (try? process.run()) != nil else { return "Failed to run git" }
     process.waitUntilExit()
-    guard process.terminationStatus == 0 else { return nil }
-    let data = pipe.fileHandleForReading.readDataToEndOfFile()
-    let urlString = (String(data: data, encoding: .utf8) ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+    guard process.terminationStatus != 0 else { return nil }
+    let err = (try? String(data: errPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8)) ?? "Unknown error"
+    return err.trimmingCharacters(in: .whitespacesAndNewlines)
+}
+
+/// Returns the GitHub repository web URL (https://github.com/owner/repo) if the workspace has a GitHub remote; nil otherwise.
+/// Reads .git/config directly to avoid spawning a subprocess (which can SIGABRT under sandbox/main-thread).
+func gitHubRepositoryURL(workspacePath: String) -> URL? {
+    let dir = URL(fileURLWithPath: workspacePath)
+    guard (try? dir.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true else { return nil }
+    var gitDir = dir.appendingPathComponent(".git", isDirectory: false)
+    var isDir: Bool = false
+    if (try? gitDir.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true {
+        isDir = true
+    } else if FileManager.default.fileExists(atPath: gitDir.path),
+              let content = try? String(contentsOf: gitDir, encoding: .utf8),
+              content.hasPrefix("gitdir:") {
+        let path = content.dropFirst("gitdir:".count).trimmingCharacters(in: .whitespacesAndNewlines)
+        gitDir = path.hasPrefix("/") ? URL(fileURLWithPath: path) : dir.appendingPathComponent(path)
+        isDir = true
+    } else {
+        return nil
+    }
+    let configURL = isDir ? gitDir.appendingPathComponent("config", isDirectory: false) : gitDir
+    guard FileManager.default.fileExists(atPath: configURL.path),
+          let config = try? String(contentsOf: configURL, encoding: .utf8) else { return nil }
+    let urlString = gitRemoteOriginURL(from: config)
+    guard !urlString.isEmpty else { return nil }
     if urlString.hasPrefix("https://github.com/") {
         var path = String(urlString.dropFirst("https://github.com/".count))
         if path.hasSuffix(".git") { path = String(path.dropLast(4)) }
@@ -238,6 +280,26 @@ func gitHubRepositoryURL(workspacePath: String) -> URL? {
         return URL(string: "https://github.com/\(path)")
     }
     return nil
+}
+
+/// Parses git config text for `[remote "origin"]` and returns the `url = ...` value.
+private func gitRemoteOriginURL(from config: String) -> String {
+    let lines = config.components(separatedBy: .newlines)
+    var inOrigin = false
+    for line in lines {
+        let trimmed = line.trimmingCharacters(in: .whitespaces)
+        if trimmed.hasPrefix("[remote \"origin\"]") {
+            inOrigin = true
+            continue
+        }
+        if inOrigin {
+            if trimmed.hasPrefix("[") { break }
+            if trimmed.hasPrefix("url =") {
+                return trimmed.dropFirst("url =".count).trimmingCharacters(in: .whitespaces)
+            }
+        }
+    }
+    return ""
 }
 
 // MARK: - Debug script helpers
