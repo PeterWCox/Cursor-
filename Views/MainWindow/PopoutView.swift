@@ -7,6 +7,7 @@ private struct TabSidebarGroup {
     let path: String
     let displayName: String
     let tabs: [AgentTab]
+    let terminalTabs: [TerminalTab]
 }
 
 /// Wrapper that observes a single tab so only this subtree re-renders when that tab streams.
@@ -15,6 +16,49 @@ private struct ObservedTabView<Content: View>: View {
     @ObservedObject var tab: AgentTab
     @ViewBuilder let content: (AgentTab) -> Content
     var body: some View { content(tab) }
+}
+
+/// Sidebar chip for a terminal tab (terminal icon + title).
+private struct TerminalTabChip: View {
+    let terminalTab: TerminalTab
+    let isSelected: Bool
+    let onSelect: () -> Void
+    let onClose: () -> Void
+
+    var body: some View {
+        Button(action: onSelect) {
+            HStack(spacing: 6) {
+                Image(systemName: "terminal")
+                    .font(.system(size: 12))
+                    .foregroundStyle(isSelected ? CursorTheme.textPrimary : CursorTheme.textSecondary)
+                Text(terminalTab.title)
+                    .font(.system(size: 12, weight: isSelected ? .semibold : .medium))
+                    .foregroundStyle(isSelected ? CursorTheme.textPrimary : CursorTheme.textSecondary)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                Button(action: onClose) {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 8, weight: .bold))
+                        .foregroundStyle(CursorTheme.textTertiary)
+                        .frame(width: 16, height: 16)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 7)
+            .background(
+                isSelected ? CursorTheme.surfaceRaised : CursorTheme.surfaceMuted,
+                in: RoundedRectangle(cornerRadius: 10, style: .continuous)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .stroke(isSelected ? CursorTheme.borderStrong : CursorTheme.border.opacity(0.6), lineWidth: 1)
+            )
+        }
+        .buttonStyle(.plain)
+    }
 }
 
 /// Sidebar chip that observes its tab so only this chip re-renders when that tab's state changes (e.g. isRunning).
@@ -193,6 +237,16 @@ struct PopoutView: View {
         gitBranches = list
         active.currentBranch = cur
     }
+
+    /// Adds a new terminal tab for the given or current project.
+    private func addNewTerminalTab(lastWorkspacePath: String? = nil) {
+        let targetWorkspacePath = lastWorkspacePath ?? tabManager.activeProjectPath
+        guard let targetWorkspacePath else { return }
+        if appState.isMainContentCollapsed {
+            withAnimation(.easeInOut(duration: 0.2)) { appState.isMainContentCollapsed = false }
+        }
+        tabManager.addTerminalTab(workspacePath: targetWorkspacePath)
+    }
     private var preferredTerminalApp: PreferredTerminalApp {
         PreferredTerminalApp(rawValue: preferredTerminalAppRawValue) ?? .automatic
     }
@@ -220,13 +274,15 @@ struct PopoutView: View {
     /// Tabs grouped by workspace path, order preserved by first occurrence.
     private var tabGroups: [TabSidebarGroup] {
         let groupedTabs = Dictionary(grouping: tabManager.tabs, by: \.workspacePath)
+        let groupedTerminals = Dictionary(grouping: tabManager.terminalTabs, by: \.workspacePath)
         return tabManager.projects.map { project in
             let path = project.path
             let displayName = appState.workspaceDisplayName(for: path)
             return TabSidebarGroup(
                 path: path,
                 displayName: displayName.isEmpty ? "Project" : displayName,
-                tabs: groupedTabs[path] ?? []
+                tabs: groupedTabs[path] ?? [],
+                terminalTabs: groupedTerminals[path] ?? []
             )
         }
     }
@@ -255,19 +311,38 @@ struct PopoutView: View {
                         .clipped()
 
                     // Agent window + composer: takes remaining width when expanded; 0 width when collapsed.
+                    // Terminal views are always kept in the hierarchy (hidden when not selected) so switching
+                    // back from Agent to Terminal preserves the shell session instead of starting a new process.
                     Group {
                         if isMainContentCollapsed {
                             Color.clear
                                 .frame(width: 0)
                                 .clipped()
-                        } else if let active = tabManager.activeTab {
-                            ObservedTabView(tab: active) { tab in
-                                agentAreaContent(tab: tab)
-                            }
-                        } else if hasOpenProjects, let projectPath = selectedProjectPath {
-                            projectEmptyStateContent(projectPath: projectPath)
                         } else {
-                            splashContentArea()
+                            ZStack {
+                                ForEach(tabManager.terminalTabs) { tab in
+                                    EmbeddedTerminalView(
+                                        workspacePath: tab.workspacePath,
+                                        isSelected: tabManager.selectedTerminalID == tab.id
+                                    )
+                                        .id(tab.id)
+                                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                                        .padding(12)
+                                        .opacity(tabManager.selectedTerminalID == tab.id ? 1 : 0)
+                                        .allowsHitTesting(tabManager.selectedTerminalID == tab.id)
+                                }
+                                if tabManager.selectedTerminalID == nil {
+                                    if let active = tabManager.activeTab {
+                                        ObservedTabView(tab: active) { tab in
+                                            agentAreaContent(tab: tab)
+                                        }
+                                    } else if hasOpenProjects, let projectPath = selectedProjectPath {
+                                        projectEmptyStateContent(projectPath: projectPath)
+                                    } else {
+                                        splashContentArea()
+                                    }
+                                }
+                            }
                         }
                     }
                     .frame(width: agentWidth)
@@ -426,6 +501,15 @@ struct PopoutView: View {
                 if let active = tabManager.activeTab, tabManager.tabs.count >= 1 {
                     Button("Close Tab") {
                         requestCloseTab(active)
+                    }
+                    .keyboardShortcut("w", modifiers: .command)
+                    .opacity(0)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                }
+
+                if let activeTerminal = tabManager.activeTerminalTab {
+                    Button("Close Terminal") {
+                        tabManager.closeTerminalTab(activeTerminal.id)
                     }
                     .keyboardShortcut("w", modifiers: .command)
                     .opacity(0)
@@ -637,6 +721,9 @@ struct PopoutView: View {
                                     Button("New Agent") {
                                         addNewAgentTab(lastWorkspacePath: group.path)
                                     }
+                                    Button("New Terminal") {
+                                        addNewTerminalTab(lastWorkspacePath: group.path)
+                                    }
                                     Button("Open in Cursor") {
                                         openProjectInCursor(group.path)
                                     }
@@ -697,12 +784,29 @@ struct PopoutView: View {
                                         showClose: true,
                                         onSelect: {
                                             tabManager.selectedTabID = t.id
+                                            tabManager.selectedTerminalID = nil
                                             tabManager.selectedProjectPath = t.workspacePath
                                             if appState.isMainContentCollapsed {
                                                 withAnimation(.easeInOut(duration: 0.2)) { appState.isMainContentCollapsed = false }
                                             }
                                         },
                                         onClose: { requestCloseTab(t) }
+                                    )
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                }
+                                ForEach(group.terminalTabs) { term in
+                                    TerminalTabChip(
+                                        terminalTab: term,
+                                        isSelected: term.id == tabManager.selectedTerminalID,
+                                        onSelect: {
+                                            tabManager.selectedTerminalID = term.id
+                                            tabManager.selectedTabID = nil
+                                            tabManager.selectedProjectPath = term.workspacePath
+                                            if appState.isMainContentCollapsed {
+                                                withAnimation(.easeInOut(duration: 0.2)) { appState.isMainContentCollapsed = false }
+                                            }
+                                        },
+                                        onClose: { tabManager.closeTerminalTab(term.id) }
                                     )
                                     .frame(maxWidth: .infinity, alignment: .leading)
                                 }
@@ -714,30 +818,53 @@ struct PopoutView: View {
             }
             .frame(maxHeight: .infinity)
 
-                            Button(action: { addNewAgentTab() }) {
-                                HStack(spacing: 8) {
-                                    Image(systemName: "plus.bubble.fill")
-                                        .font(.system(size: 12, weight: .semibold))
-                                    Text("New Agent")
-                                        .font(.system(size: 13, weight: .medium))
-                                    Spacer(minLength: 4)
-                                    Text("⌘T")
-                                        .font(.system(size: 11, weight: .medium))
-                                        .foregroundStyle(CursorTheme.textTertiary)
+                            VStack(spacing: 8) {
+                                Button(action: { addNewAgentTab() }) {
+                                    HStack(spacing: 8) {
+                                        Image(systemName: "plus.bubble.fill")
+                                            .font(.system(size: 12, weight: .semibold))
+                                        Text("New Agent")
+                                            .font(.system(size: 13, weight: .medium))
+                                        Spacer(minLength: 4)
+                                        Text("⌘T")
+                                            .font(.system(size: 11, weight: .medium))
+                                            .foregroundStyle(CursorTheme.textTertiary)
+                                    }
+                                    .foregroundStyle(CursorTheme.textSecondary)
+                                    .padding(.horizontal, 12)
+                                    .padding(.vertical, 10)
+                                    .frame(maxWidth: .infinity)
+                                    .background(CursorTheme.surfaceMuted, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                            .stroke(CursorTheme.border, lineWidth: 1)
+                                    )
                                 }
-                                .foregroundStyle(CursorTheme.textSecondary)
-                                .padding(.horizontal, 12)
-                                .padding(.vertical, 10)
-                                .frame(maxWidth: .infinity)
-                                .background(CursorTheme.surfaceMuted, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                        .stroke(CursorTheme.border, lineWidth: 1)
-                                )
+                                .buttonStyle(.plain)
+                                .keyboardShortcut("t", modifiers: .command)
+                                .help("New agent tab (⌘T)")
+
+                                Button(action: { addNewTerminalTab() }) {
+                                    HStack(spacing: 8) {
+                                        Image(systemName: "terminal")
+                                            .font(.system(size: 12, weight: .semibold))
+                                        Text("New Terminal")
+                                            .font(.system(size: 13, weight: .medium))
+                                        Spacer(minLength: 4)
+                                    }
+                                    .foregroundStyle(CursorTheme.textSecondary)
+                                    .padding(.horizontal, 12)
+                                    .padding(.vertical, 10)
+                                    .frame(maxWidth: .infinity)
+                                    .background(CursorTheme.surfaceMuted, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                            .stroke(CursorTheme.border, lineWidth: 1)
+                                    )
+                                }
+                                .buttonStyle(.plain)
+                                .help("New terminal tab")
                             }
-                            .buttonStyle(.plain)
-                            .keyboardShortcut("t", modifiers: .command)
-                            .help("New agent tab (⌘T)")
             .padding(.top, 10)
         }
         .padding(.horizontal, Self.sidebarContentPadding)
@@ -1048,7 +1175,7 @@ struct PopoutView: View {
                     )
                     .frame(height: composerHeight)
 
-                    if userPromptDisplayText(from: tab.prompt).isEmpty {
+                    if userPromptDisplayText(from: tab.prompt).isEmpty && screenshotPaths(from: tab.prompt).isEmpty {
                         Text("Send message and/or ⌘V to paste one or more screenshots from clipboard. Press Enter to submit and ⇧Enter for new line.")
                             .font(.system(size: 13, weight: .regular, design: .monospaced))
                             .foregroundStyle(CursorTheme.textTertiary)

@@ -83,6 +83,7 @@ struct SubmittableTextEditor: NSViewRepresentable {
         textView.autoresizingMask = [.width]
         textView.textContainer?.widthTracksTextView = true
         textView.textContainer?.containerSize = NSSize(width: 0, height: CGFloat.greatestFiniteMagnitude)
+        textView.textContainer?.lineFragmentPadding = 0
 
         scrollView.documentView = textView
         scrollView.hasVerticalScroller = false

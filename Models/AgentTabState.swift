@@ -90,6 +90,19 @@ struct QueuedFollowUp: Identifiable, Equatable, Codable {
     }
 }
 
+/// A terminal tab: shell session in a workspace. Not persisted across launches.
+class TerminalTab: ObservableObject, Identifiable {
+    let id: UUID
+    @Published var title: String
+    let workspacePath: String
+
+    init(id: UUID = UUID(), title: String, workspacePath: String) {
+        self.id = id
+        self.title = title
+        self.workspacePath = workspacePath
+    }
+}
+
 class AgentTab: ObservableObject, Identifiable {
     let id: UUID
     @Published var title: String
@@ -174,7 +187,9 @@ struct ProjectState: Identifiable, Codable, Equatable {
 class TabManager: ObservableObject {
     @Published private(set) var projects: [ProjectState] = []
     @Published var tabs: [AgentTab] = []
+    @Published var terminalTabs: [TerminalTab] = []
     @Published var selectedTabID: UUID?
+    @Published var selectedTerminalID: UUID?
     @Published var selectedProjectPath: String?
     /// Stack of recently closed tabs (most recent last) for "Reopen closed tab" (Cmd+Shift+T). Capped at 20.
     @Published private(set) var recentlyClosedTabs: [SavedAgentTab] = []
@@ -220,14 +235,20 @@ class TabManager: ObservableObject {
         TabManagerPersistence.save(state)
     }
 
-    /// Current tab, or nil when there are no tabs (splash state).
+    /// Current agent tab, or nil when a terminal tab is selected or there are no tabs.
     var activeTab: AgentTab? {
-        guard let selectedTabID else { return nil }
+        guard selectedTerminalID == nil, let selectedTabID else { return nil }
         return tabs.first { $0.id == selectedTabID }
     }
 
+    /// Current terminal tab, or nil when an agent tab is selected or no terminal is open.
+    var activeTerminalTab: TerminalTab? {
+        guard let selectedTerminalID else { return nil }
+        return terminalTabs.first { $0.id == selectedTerminalID }
+    }
+
     var activeProjectPath: String? {
-        activeTab?.workspacePath ?? selectedProjectPath ?? projects.first?.path
+        activeTerminalTab?.workspacePath ?? activeTab?.workspacePath ?? selectedProjectPath ?? projects.first?.path
     }
 
     var openProjectCount: Int {
@@ -244,8 +265,14 @@ class TabManager: ObservableObject {
             selectedProjectPath = normalizedPath
             if let existingTab = activeTab, existingTab.workspacePath == normalizedPath {
                 selectedTabID = existingTab.id
-            } else if !tabs.contains(where: { $0.id == selectedTabID && $0.workspacePath == normalizedPath }) {
+                selectedTerminalID = nil
+            } else if let existingTerminal = activeTerminalTab, existingTerminal.workspacePath == normalizedPath {
+                selectedTerminalID = existingTerminal.id
                 selectedTabID = nil
+            } else if !tabs.contains(where: { $0.id == selectedTabID && $0.workspacePath == normalizedPath }),
+                      !terminalTabs.contains(where: { $0.id == selectedTerminalID && $0.workspacePath == normalizedPath }) {
+                selectedTabID = nil
+                selectedTerminalID = nil
             }
         }
         reconcileSelection(preferredProjectPath: normalizedPath)
@@ -254,13 +281,17 @@ class TabManager: ObservableObject {
     func selectProject(_ path: String) {
         guard projects.contains(where: { $0.path == path }) else { return }
         selectedProjectPath = path
-        if let selectedTab = activeTab, selectedTab.workspacePath == path {
-            return
-        }
+        if let selectedTab = activeTab, selectedTab.workspacePath == path { return }
+        if let selectedTerminal = activeTerminalTab, selectedTerminal.workspacePath == path { return }
         if let firstTab = tabs.first(where: { $0.workspacePath == path }) {
             selectedTabID = firstTab.id
+            selectedTerminalID = nil
+        } else if let firstTerminal = terminalTabs.first(where: { $0.workspacePath == path }) {
+            selectedTerminalID = firstTerminal.id
+            selectedTabID = nil
         } else {
             selectedTabID = nil
+            selectedTerminalID = nil
         }
     }
 
@@ -280,8 +311,43 @@ class TabManager: ObservableObject {
         tabs.append(tab)
         observe(tab)
         selectedTabID = tab.id
+        selectedTerminalID = nil
         selectedProjectPath = resolved
         return tab
+    }
+
+    /// Adds a new terminal tab for the given (or current) project. Returns nil if workspace path is invalid.
+    @discardableResult
+    func addTerminalTab(workspacePath path: String? = nil) -> TerminalTab? {
+        let resolved = (path ?? activeProjectPath ?? activeTab?.workspacePath ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        guard Self.workspacePathExists(resolved) else { return nil }
+        addProject(path: resolved, select: true)
+        let count = terminalTabs.filter { $0.workspacePath == resolved }.count + 1
+        let tab = TerminalTab(title: "Terminal \(count)", workspacePath: resolved)
+        terminalTabs.append(tab)
+        selectedTerminalID = tab.id
+        selectedTabID = nil
+        selectedProjectPath = resolved
+        return tab
+    }
+
+    func closeTerminalTab(_ id: UUID) {
+        guard let index = terminalTabs.firstIndex(where: { $0.id == id }) else { return }
+        let tabToClose = terminalTabs[index]
+        let wasSelected = selectedTerminalID == id
+        let closedPath = tabToClose.workspacePath
+        terminalTabs.remove(at: index)
+        if wasSelected {
+            if let replacement = terminalTabs.first(where: { $0.workspacePath == closedPath }) {
+                selectedTerminalID = replacement.id
+            } else if let firstAgent = tabs.first(where: { $0.workspacePath == closedPath }) {
+                selectedTerminalID = nil
+                selectedTabID = firstAgent.id
+            } else {
+                selectedTerminalID = nil
+            }
+            selectedProjectPath = closedPath
+        }
     }
 
     func closeTab(_ id: UUID) {
@@ -298,9 +364,15 @@ class TabManager: ObservableObject {
             if wasSelected {
                 if let replacement = tabs.first(where: { $0.workspacePath == closedProjectPath }) {
                     selectedTabID = replacement.id
+                    selectedTerminalID = nil
                     selectedProjectPath = replacement.workspacePath
+                } else if let firstTerminal = terminalTabs.first(where: { $0.workspacePath == closedProjectPath }) {
+                    selectedTabID = nil
+                    selectedTerminalID = firstTerminal.id
+                    selectedProjectPath = closedProjectPath
                 } else {
                     selectedTabID = nil
+                    selectedTerminalID = nil
                     selectedProjectPath = closedProjectPath
                 }
             }
@@ -319,6 +391,7 @@ class TabManager: ObservableObject {
         }
         let selectedProjectWasRemoved = selectedProjectPath == path
         tabs.removeAll { $0.workspacePath == path }
+        terminalTabs.removeAll { $0.workspacePath == path }
         projects.removeAll { $0.path == path }
 
         if selectedProjectWasRemoved {
@@ -326,6 +399,9 @@ class TabManager: ObservableObject {
         }
         if let activeTab, activeTab.workspacePath == path {
             selectedTabID = nil
+        }
+        if let activeTerminal = activeTerminalTab, activeTerminal.workspacePath == path {
+            selectedTerminalID = nil
         }
         reconcileSelection()
     }
@@ -359,9 +435,13 @@ class TabManager: ObservableObject {
     private func reconcileSelection(preferredProjectPath: String? = nil) {
         let validProjectPaths = Set(projects.map(\.path))
         let validTabIDs = Set(tabs.map(\.id))
+        let validTerminalIDs = Set(terminalTabs.map(\.id))
 
         if let selectedTabID, !validTabIDs.contains(selectedTabID) {
             self.selectedTabID = nil
+        }
+        if let selectedTerminalID, !validTerminalIDs.contains(selectedTerminalID) {
+            self.selectedTerminalID = nil
         }
         if let selectedProjectPath, !validProjectPaths.contains(selectedProjectPath) {
             self.selectedProjectPath = nil
@@ -369,6 +449,10 @@ class TabManager: ObservableObject {
 
         if let activeTab {
             selectedProjectPath = activeTab.workspacePath
+            return
+        }
+        if let activeTerminalTab {
+            selectedProjectPath = activeTerminalTab.workspacePath
             return
         }
 
