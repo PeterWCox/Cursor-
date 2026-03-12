@@ -1,5 +1,6 @@
 import SwiftUI
 import AppKit
+import Combine
 
 // MARK: - Menu bar icon (template, adapts to light/dark menu bar)
 
@@ -139,27 +140,36 @@ private final class StatusItemView: NSView {
     }
 }
 
+/// Width of the panel when collapsed to sidebar-only (title bar + tab sidebar).
+private let collapsedPanelWidth: CGFloat = 310
+/// Minimum height when collapsed so the window can shrink and avoid empty space below the sidebar.
+private let collapsedPanelMinHeight: CGFloat = 280
+
 class AppDelegate: NSObject, NSApplicationDelegate {
     var statusItem: NSStatusItem!
     var panel: FloatingPanel!
     let appState = AppState()
+    private var cancellables = Set<AnyCancellable>()
+    private var savedExpandedPanelWidth: CGFloat = 720
+    private var savedExpandedPanelHeight: CGFloat?
 
     func applicationWillTerminate(_ notification: Notification) {
         appState.saveTabState()
+        PanelFrameStorage.save(panel.frame)
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
 
         let image = BrandStatusIcon.makeImage(size: 22)
-        image.accessibilityDescription = "Cursor+"
+        image.accessibilityDescription = "Cursor Metro"
 
         let menu = NSMenu()
         let settingsItem = NSMenuItem(title: "Settings…", action: #selector(showSettings), keyEquivalent: ",")
         settingsItem.target = self
         menu.addItem(settingsItem)
         menu.addItem(NSMenuItem.separator())
-        let quitItem = NSMenuItem(title: "Quit Cursor+", action: #selector(quitApp), keyEquivalent: "q")
+        let quitItem = NSMenuItem(title: "Quit Cursor Metro", action: #selector(quitApp), keyEquivalent: "q")
         quitItem.target = self
         menu.addItem(quitItem)
 
@@ -181,6 +191,41 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             .environmentObject(appState.tabManager)
         )
         panel.contentView = hostingView
+
+        appState.$isMainContentCollapsed
+            .dropFirst()
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] collapsed in
+                self?.applyCollapsedState(collapsed)
+            }
+            .store(in: &cancellables)
+    }
+
+    private func applyCollapsedState(_ collapsed: Bool) {
+        guard let panel = panel else { return }
+        var style = panel.styleMask
+        if collapsed {
+            style.remove(.resizable)
+            panel.styleMask = style
+            savedExpandedPanelWidth = panel.frame.width
+            savedExpandedPanelHeight = panel.frame.height
+            panel.contentMinSize = NSSize(width: collapsedPanelWidth, height: collapsedPanelMinHeight)
+            var frame = panel.frame
+            frame.size.width = collapsedPanelWidth
+            // Keep current height when collapsing; only width changes.
+            panel.setFrame(frame, display: true, animate: true)
+        } else {
+            style.insert(.resizable)
+            panel.styleMask = style
+            panel.contentMinSize = NSSize(width: 360, height: 400)
+            var frame = panel.frame
+            frame.size.width = max(360, savedExpandedPanelWidth)
+            if let h = savedExpandedPanelHeight, h >= 400 {
+                frame.size.height = h
+            }
+            savedExpandedPanelHeight = nil
+            panel.setFrame(frame, display: true, animate: true)
+        }
     }
 
     @objc func togglePanel() {
@@ -188,7 +233,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             panel.orderOut(nil)
         } else {
             NSApp.activate(ignoringOtherApps: true)
-            positionNearStatusItem()
+            restoreOrPositionPanel()
             panel.makeKeyAndOrderFront(nil)
         }
     }
@@ -221,12 +266,69 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         let y = screenRect.minY - panel.frame.height - 4
         panel.setFrameOrigin(NSPoint(x: x, y: y))
     }
+
+    /// Only position near the menu bar when we have no saved frame (first launch).
+    private func restoreOrPositionPanel() {
+        if FloatingPanel.hasSavedFrame() {
+            FloatingPanel.restoreSavedFrame(to: panel)
+            if panel.frame.width <= collapsedPanelWidth + 20 {
+                appState.isMainContentCollapsed = true
+                panel.contentMinSize = NSSize(width: collapsedPanelWidth, height: 400)
+            }
+        } else {
+            positionNearStatusItem()
+        }
+    }
+}
+
+// MARK: - Panel frame persistence
+
+private enum PanelFrameStorage {
+    static let xKey = "panelFrameX"
+    static let yKey = "panelFrameY"
+    static let widthKey = "panelFrameWidth"
+    static let heightKey = "panelFrameHeight"
+
+    static func save(_ frame: NSRect) {
+        UserDefaults.standard.set(frame.origin.x, forKey: xKey)
+        UserDefaults.standard.set(frame.origin.y, forKey: yKey)
+        UserDefaults.standard.set(frame.size.width, forKey: widthKey)
+        UserDefaults.standard.set(frame.size.height, forKey: heightKey)
+    }
+
+    static func load() -> NSRect? {
+        let x = UserDefaults.standard.double(forKey: xKey)
+        let y = UserDefaults.standard.double(forKey: yKey)
+        let w = UserDefaults.standard.double(forKey: widthKey)
+        let h = UserDefaults.standard.double(forKey: heightKey)
+        guard w > 0, h > 0 else { return nil }
+        return NSRect(x: x, y: y, width: w, height: h)
+    }
 }
 
 class FloatingPanel: NSPanel {
+    private static let defaultWidth: CGFloat = 720
+    private static let defaultHeight: CGFloat = 960
+
+    static func hasSavedFrame() -> Bool {
+        guard let frame = PanelFrameStorage.load() else { return false }
+        let minW: CGFloat = collapsedPanelWidth
+        let maxW: CGFloat = 1400
+        let minH: CGFloat = 400, maxH: CGFloat = 1600
+        guard frame.size.width >= minW, frame.size.width <= maxW,
+              frame.size.height >= minH, frame.size.height <= maxH else { return false }
+        let onScreen = NSScreen.screens.contains { $0.frame.intersects(frame) }
+        return onScreen
+    }
+
+    static func restoreSavedFrame(to panel: NSPanel) {
+        guard let frame = PanelFrameStorage.load() else { return }
+        panel.setFrame(frame, display: false)
+    }
+
     init() {
         super.init(
-            contentRect: NSRect(x: 0, y: 0, width: 720, height: 960),
+            contentRect: NSRect(x: 0, y: 0, width: Self.defaultWidth, height: Self.defaultHeight),
             styleMask: [.borderless, .fullSizeContentView, .nonactivatingPanel, .resizable],
             backing: .buffered,
             defer: false
@@ -236,10 +338,19 @@ class FloatingPanel: NSPanel {
         isMovableByWindowBackground = true
         hidesOnDeactivate = false
         level = .floating
+        acceptsMouseMovedEvents = true
         isReleasedWhenClosed = false
         animationBehavior = .utilityWindow
         contentMinSize = NSSize(width: 360, height: 400)
         contentMaxSize = NSSize(width: 1400, height: 1600)
+        if Self.hasSavedFrame(), let frame = PanelFrameStorage.load() {
+            setFrame(frame, display: false)
+        }
+    }
+
+    override func orderOut(_ sender: Any?) {
+        PanelFrameStorage.save(frame)
+        super.orderOut(sender)
     }
 
     override var canBecomeKey: Bool { true }
@@ -249,6 +360,8 @@ class AppState: ObservableObject {
     @AppStorage("workspacePath") var workspacePath: String = FileManager.default.homeDirectoryForCurrentUser.path
     @AppStorage(AppPreferences.projectsRootPathKey) var projectsRootPath: String = AppPreferences.defaultProjectsRootPath
     @Published var showSettingsSheet: Bool = false
+    /// When true, main agent content is hidden and panel is resized to sidebar-only width.
+    @Published var isMainContentCollapsed: Bool = false
     let tabManager = TabManager(loadedState: TabManagerPersistence.load())
 
     func saveTabState() {

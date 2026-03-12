@@ -17,21 +17,13 @@ struct QuickActionButtonsView: View {
     var body: some View {
         HStack(spacing: 8) {
             ForEach(commands) { cmd in
-                Button(action: { onCommand(cmd) }) {
-                    HStack(spacing: 6) {
-                        Image(systemName: cmd.icon)
-                        Text(cmd.title)
-                    }
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(CursorTheme.textPrimary)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 8)
-                    .background(CursorTheme.surfaceMuted, in: Capsule())
-                    .overlay(Capsule().stroke(CursorTheme.border, lineWidth: 1))
-                }
-                .buttonStyle(.plain)
-                .disabled(isDisabled)
-                .help(cmd.prompt)
+                ActionButton(
+                    title: cmd.title,
+                    icon: cmd.icon,
+                    action: { onCommand(cmd) },
+                    isDisabled: isDisabled,
+                    help: cmd.prompt
+                )
             }
 
             // if let onDebug {

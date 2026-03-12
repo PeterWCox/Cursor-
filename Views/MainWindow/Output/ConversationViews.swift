@@ -185,6 +185,8 @@ struct ConversationTurnView: View, Equatable {
     let turn: ConversationTurn
     var workspacePath: String = ""
 
+    @State private var showCopiedFeedback = false
+
     private var segments: [ConversationSegment] { visibleSegments(for: turn) }
     private var hasAssistantContent: Bool { segments.contains { $0.kind == .assistant } }
 
@@ -216,18 +218,44 @@ struct ConversationTurnView: View, Equatable {
                     .stroke(CursorTheme.border, lineWidth: 1)
             )
             .overlay(alignment: .topTrailing) {
-                Button {
-                    NSPasteboard.general.clearContents()
-                    NSPasteboard.general.setString(turn.userPrompt, forType: .string)
-                } label: {
-                    Image(systemName: "doc.on.doc")
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(CursorTheme.textSecondary)
-                        .contentShape(Rectangle())
-                        .frame(width: 28, height: 28)
+                HStack(spacing: 6) {
+                    if showCopiedFeedback {
+                        Text("Copied!")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(CursorTheme.textPrimary)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                            .background(CursorTheme.surfaceRaised, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                    .stroke(CursorTheme.border, lineWidth: 1)
+                            )
+                            .transition(.opacity.combined(with: .scale(scale: 0.92)))
+                    }
+                    Button {
+                        NSPasteboard.general.clearContents()
+                        NSPasteboard.general.setString(turn.userPrompt, forType: .string)
+                        withAnimation(.easeOut(duration: 0.2)) { showCopiedFeedback = true }
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                            withAnimation(.easeIn(duration: 0.2)) { showCopiedFeedback = false }
+                        }
+                    } label: {
+                        Image(systemName: "doc.on.doc")
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundStyle(CursorTheme.textSecondary)
+                            .contentShape(Rectangle())
+                            .frame(width: 28, height: 28)
+                    }
+                    .buttonStyle(.plain)
+                    .help("Copy message")
+                    .onHover { isHovered in
+                        if isHovered {
+                            NSCursor.pointingHand.push()
+                        } else {
+                            NSCursor.pop()
+                        }
+                    }
                 }
-                .buttonStyle(.plain)
-                .help("Copy message")
                 .padding(6)
             }
 

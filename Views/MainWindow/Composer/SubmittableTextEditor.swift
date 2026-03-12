@@ -70,7 +70,7 @@ struct SubmittableTextEditor: NSViewRepresentable {
         textView.font = NSFont.monospacedSystemFont(ofSize: NSFont.systemFontSize, weight: .regular)
         textView.backgroundColor = .clear
         textView.textColor = NSColor.white.withAlphaComponent(0.92)
-        textView.insertionPointColor = NSColor.white.withAlphaComponent(0.9)
+        textView.insertionPointColor = .white
         textView.isEditable = true
         textView.isSelectable = true
         textView.allowsUndo = true

@@ -37,6 +37,9 @@
 		A1000029 /* SetDebugURLSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000029 /* SetDebugURLSheet.swift */; };
 		A1000030 /* DialogButtonStyles.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000030 /* DialogButtonStyles.swift */; };
 		A1000031 /* AppDialogSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000031 /* AppDialogSheet.swift */; };
+		A1000032 /* TooltipModifier.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000032 /* TooltipModifier.swift */; };
+		A1000033 /* MetroSpeechBubble.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000033 /* MetroSpeechBubble.swift */; };
+		A1000034 /* ActionButton.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000034 /* ActionButton.swift */; };
 		A1000024 /* Textual in Frameworks */ = {isa = PBXBuildFile; productRef = A8000003 /* Textual */; };
 /* End PBXBuildFile section */
 
@@ -72,6 +75,9 @@
 		A2000029 /* SetDebugURLSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SetDebugURLSheet.swift; sourceTree = "<group>"; };
 		A2000030 /* DialogButtonStyles.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DialogButtonStyles.swift; sourceTree = "<group>"; };
 		A2000031 /* AppDialogSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDialogSheet.swift; sourceTree = "<group>"; };
+		A2000032 /* TooltipModifier.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TooltipModifier.swift; sourceTree = "<group>"; };
+		A2000033 /* MetroSpeechBubble.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MetroSpeechBubble.swift; sourceTree = "<group>"; };
+		A2000034 /* ActionButton.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActionButton.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -121,7 +127,9 @@
 		A5000023 /* Components */ = {
 			isa = PBXGroup;
 			children = (
+				A2000034 /* ActionButton.swift */,
 				A2000031 /* AppDialogSheet.swift */,
+				A2000033 /* MetroSpeechBubble.swift */,
 			);
 			path = Components;
 			sourceTree = "<group>";
@@ -239,6 +247,7 @@
 				A2000027 /* AppPreferences.swift */,
 				A2000028 /* ProjectSettingsStorage.swift */,
 				A2000008 /* WorkspaceHelpers.swift */,
+				A2000032 /* TooltipModifier.swift */,
 			);
 			path = Helpers;
 			sourceTree = "<group>";
@@ -373,6 +382,9 @@
 				A1000029 /* SetDebugURLSheet.swift in Sources */,
 				A1000030 /* DialogButtonStyles.swift in Sources */,
 				A1000031 /* AppDialogSheet.swift in Sources */,
+				A1000032 /* TooltipModifier.swift in Sources */,
+				A1000033 /* MetroSpeechBubble.swift in Sources */,
+				A1000034 /* ActionButton.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

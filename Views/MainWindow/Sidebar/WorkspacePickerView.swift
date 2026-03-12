@@ -7,7 +7,6 @@ struct WorkspacePickerView: View {
     var folders: [URL]
     var selectedPath: String
     var onSelectFolder: (String) -> Void
-    var onBrowse: () -> Void
     /// Called when the user opens the dropdown so the parent can reload the folder list.
     var onOpenMenu: () -> Void = {}
 
@@ -23,10 +22,6 @@ struct WorkspacePickerView: View {
                         Text(folder.lastPathComponent)
                     }
                 }
-            }
-            Divider()
-            Button("Browse other folder...") {
-                onBrowse()
             }
         } label: {
             pickerLabel(icon: "folder", title: displayName)

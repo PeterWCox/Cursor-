@@ -42,35 +42,52 @@ struct ModelPickerView: View {
     }
 
     var body: some View {
-        Menu {
-            ForEach(models, id: \.id) { model in
-                Button {
-                    onSelect(model.id)
-                } label: {
-                    HStack(spacing: 8) {
-                        if model.id == selectedModelId {
-                            Image(systemName: "checkmark")
-                        } else {
-                            Image(systemName: model.isPremium ? "sparkles" : "circle")
-                                .opacity(model.isPremium ? 0.9 : 0.2)
-                        }
+        HStack(spacing: 8) {
+            HStack(spacing: 8) {
+                if selectedModel.isPremium {
+                    premiumIndicator
+                }
+                Menu {
+                    ForEach(models, id: \.id) { model in
+                        Button {
+                            onSelect(model.id)
+                        } label: {
+                            HStack(spacing: 8) {
+                                if model.id == selectedModelId {
+                                    Image(systemName: "checkmark")
+                                } else {
+                                    Image(systemName: model.isPremium ? "sparkles" : "circle")
+                                        .opacity(model.isPremium ? 0.9 : 0.2)
+                                }
 
-                        Text(model.label)
+                                Text(model.label)
 
-                        if model.isPremium {
-                            Spacer(minLength: 12)
-                            Text("Premium")
-                                .font(.system(size: 10, weight: .semibold))
-                                .foregroundStyle(premiumSelectionBadgeTextColor)
+                                if model.isPremium {
+                                    Spacer(minLength: 12)
+                                    Text("Premium")
+                                        .font(.system(size: 10, weight: .semibold))
+                                        .foregroundStyle(premiumSelectionBadgeTextColor)
+                                }
+                            }
                         }
                     }
+                } label: {
+                    pickerLabel(for: selectedModel)
                 }
+                .menuStyle(.borderlessButton)
+                .fixedSize(horizontal: true, vertical: false)
             }
-        } label: {
-            pickerLabel(for: selectedModel)
         }
-        .menuStyle(.borderlessButton)
         .colorScheme(.dark)
+    }
+
+    /// Red "!" with white outline/border when a premium (non-Auto) model is selected.
+    private var premiumIndicator: some View {
+        Text("!")
+            .font(.system(size: 12, weight: .bold))
+            .foregroundStyle(.red)
+            .frame(width: 18, height: 18)
+            .background(Circle().strokeBorder(Color.white, lineWidth: 1.5))
     }
 
     private func pickerLabel(for model: ModelOption) -> some View {
@@ -98,12 +115,12 @@ struct ModelPickerView: View {
         .font(.system(size: 12, weight: .medium))
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
-        .frame(maxWidth: .infinity, alignment: .leading)
         .background(labelBackground(for: model), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: 10, style: .continuous)
                 .stroke(labelBorderColor(for: model), lineWidth: model.isPremium ? 1.5 : 1)
         )
         .shadow(color: labelShadowColor(for: model), radius: 12, y: 4)
+        .fixedSize(horizontal: true, vertical: false)
     }
 }

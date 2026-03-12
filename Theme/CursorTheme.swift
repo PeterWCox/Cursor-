@@ -22,6 +22,12 @@ enum CursorTheme {
     /// Bright gold for selected premium model text/icon so it’s obvious at a glance.
     static let premiumBright = Color(red: 1.00, green: 0.92, blue: 0.55)
     static let cursorPlusTeal = Color(red: 0.0, green: 0.83, blue: 0.71)
+    /// Metro subtitle: bright blue (script-style branding).
+    static let metroBlue = Color(red: 0.20, green: 0.45, blue: 0.95)
+    /// Metro accent: red underline.
+    static let metroRed = Color(red: 0.90, green: 0.22, blue: 0.20)
+    /// Tesco blue for Metro speech bubble (brand-style).
+    static let tescoBlue = Color(red: 0, green: 83/255, blue: 159/255)
 
     static var brandGradient: LinearGradient {
         LinearGradient(

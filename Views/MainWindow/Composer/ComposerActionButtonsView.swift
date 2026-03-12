@@ -1,21 +1,10 @@
 import SwiftUI
 
-// MARK: - Composer action buttons (context indicator) — same row as pickers
-// Processing blue matches Agent tab spinner for consistency.
-private let contextWheelBlue = Color(red: 0.45, green: 0.68, blue: 1.0)
-
+// MARK: - Composer action buttons (Show history, etc.)
 struct ComposerActionButtonsView: View {
     @Binding var showPinnedQuestionsPanel: Bool
     var hasContext: Bool
     var isRunning: Bool
-    /// Context token usage for the small progress indicator; (used, limit). Pass (0, 0) to hide.
-    var contextUsed: Int = 0
-    var contextLimit: Int = 0
-
-    private var contextFraction: Double {
-        guard contextLimit > 0 else { return 0 }
-        return min(1, Double(contextUsed) / Double(contextLimit))
-    }
 
     var body: some View {
         HStack(spacing: 10) {
@@ -24,10 +13,6 @@ struct ComposerActionButtonsView: View {
             // Only show the "show questions" control when panel is hidden; when shown, close is on the floating container.
             if !showPinnedQuestionsPanel {
                 questionsPanelToggle
-            }
-
-            if contextLimit > 0 {
-                contextProgressCircle
             }
         }
     }
@@ -53,31 +38,74 @@ struct ComposerActionButtonsView: View {
         .fixedSize(horizontal: true, vertical: false)
         .help("Show questions you asked in this conversation")
     }
+}
 
-    private var contextProgressCircle: some View {
-        let usedK = contextUsed / 1000
-        let limitK = contextLimit / 1000
-        let pct = contextLimit > 0 ? Int(round(contextFraction * 100)) : 0
-        let tooltip = "~\(usedK)k / \(limitK)k tokens (\(pct)% used)"
-        return HStack(spacing: 6) {
-            ZStack {
-                // Track: obvious outline
-                Circle()
-                    .stroke(CursorTheme.borderStrong, lineWidth: 3)
-                // Filled arc: same blue as Agent tab processing
-                Circle()
-                    .trim(from: 0, to: contextFraction)
-                    .stroke(
-                        contextWheelBlue,
-                        style: StrokeStyle(lineWidth: 3, lineCap: .round)
-                    )
-                    .rotationEffect(.degrees(-90))
+// MARK: - Context usage (used on picker row in PopoutView)
+private let contextWheelBlue = Color(red: 0.45, green: 0.68, blue: 1.0)
+
+struct ContextUsageView: View {
+    var contextUsed: Int
+    var contextLimit: Int
+
+    private var contextFraction: Double {
+        guard contextLimit > 0 else { return 0 }
+        return min(1, Double(contextUsed) / Double(contextLimit))
+    }
+
+    var body: some View {
+        if contextLimit > 0 {
+            let usedK = contextUsed / 1000
+            let limitK = contextLimit / 1000
+            let pct = Int(round(contextFraction * 100))
+            let tooltip = "~\(usedK)k / \(limitK)k tokens (\(pct)% used)"
+            HStack(spacing: 6) {
+                ZStack {
+                    Circle()
+                        .stroke(CursorTheme.borderStrong, lineWidth: 3)
+                    Circle()
+                        .trim(from: 0, to: contextFraction)
+                        .stroke(
+                            contextWheelBlue,
+                            style: StrokeStyle(lineWidth: 3, lineCap: .round)
+                        )
+                        .rotationEffect(.degrees(-90))
+                }
+                .frame(width: 20, height: 20)
+                Text("\(usedK)k / \(limitK)k")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(CursorTheme.textSecondary)
             }
-            .frame(width: 20, height: 20)
-            Text("\(usedK)k / \(limitK)k")
-                .font(.system(size: 11, weight: .medium))
-                .foregroundStyle(CursorTheme.textSecondary)
+            .help(tooltip)
         }
-        .help(tooltip)
+    }
+}
+
+// MARK: - Usage (API/billing placeholder; CLI does not expose usage)
+struct UsageView: View {
+    @State private var showUsagePopover = false
+
+    var body: some View {
+        Button {
+            showUsagePopover = true
+        } label: {
+            HStack(spacing: 6) {
+                Text("Usage")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(CursorTheme.textSecondary)
+                Text("$???")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(CursorTheme.textSecondary)
+            }
+        }
+        .buttonStyle(.plain)
+        .popover(isPresented: $showUsagePopover, arrowEdge: .bottom) {
+            Text("The Cursor Agent CLI does not currently support showing usage.")
+                .font(.system(size: 12, weight: .regular))
+                .foregroundStyle(CursorTheme.textPrimary)
+                .padding(12)
+                .frame(width: 240)
+                .background(CursorTheme.surface)
+                .presentationBackground(CursorTheme.surface)
+        }
     }
 }

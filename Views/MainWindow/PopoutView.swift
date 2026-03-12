@@ -32,6 +32,11 @@ struct PopoutView: View {
     @State private var closeTabConfirmationTabID: UUID? = nil
     /// Workspace paths for groups that are collapsed in the sidebar (accordion).
     @State private var collapsedGroupPaths: Set<String> = []
+    /// When set, the queued follow-up with this ID is in edit mode; draft text is in editingFollowUpDraft.
+    @State private var editingFollowUpID: UUID? = nil
+    @State private var editingFollowUpDraft: String = ""
+    /// When true, hide main agent content and show only title bar + tab sidebar (uses AppState so panel can resize).
+    private var isMainContentCollapsed: Bool { appState.isMainContentCollapsed }
 
     private var tab: AgentTab { tabManager.activeTab }
 
@@ -56,6 +61,9 @@ struct PopoutView: View {
     }
     /// Adds a new agent tab and resets model to Auto so each new window starts with the default.
     private func addNewAgentTab(initialPrompt: String? = nil, lastWorkspacePath: String? = nil) {
+        if appState.isMainContentCollapsed {
+            withAnimation(.easeInOut(duration: 0.2)) { appState.isMainContentCollapsed = false }
+        }
         tabManager.addTab(initialPrompt: initialPrompt, lastWorkspacePath: lastWorkspacePath)
         selectedModel = AvailableModels.autoID
     }
@@ -67,7 +75,7 @@ struct PopoutView: View {
         min(100, (messagesSentForUsage * 100) / AppLimits.includedAPIQuota)
     }
 
-    private let sidebarWidth: CGFloat = 200
+    private let sidebarWidth: CGFloat = 250
 
     /// Tab focuses the prompt input; these are set by SubmittableTextEditor via onFocusRequested.
     @State private var focusPromptInput: (() -> Void)?
@@ -111,39 +119,49 @@ struct PopoutView: View {
             HStack(alignment: .top, spacing: 0) {
                 tabSidebar
 
-                VStack(spacing: 12) {
-                    if let error = tab.errorMessage {
-                        Text(error)
-                            .font(.system(size: 12, weight: .medium))
-                            .foregroundStyle(Color(red: 1.0, green: 0.64, blue: 0.67))
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(.horizontal, 14)
-                            .padding(.vertical, 10)
-                            .background(cardBackground.opacity(0.96), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 14, style: .continuous)
-                                    .stroke(Color.red.opacity(0.25), lineWidth: 1)
-                            )
+                // Agent area: when collapsed, use zero width so sidebar stays fixed and agent collapses left to nothing.
+                Group {
+                    if isMainContentCollapsed {
+                        Color.clear
+                            .frame(width: 0)
+                            .clipped()
+                    } else {
+                        VStack(spacing: 12) {
+                            if let error = tab.errorMessage {
+                                Text(error)
+                                    .font(.system(size: 12, weight: .medium))
+                                    .foregroundStyle(Color(red: 1.0, green: 0.64, blue: 0.67))
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .padding(.horizontal, 14)
+                                    .padding(.vertical, 10)
+                                    .background(cardBackground.opacity(0.96), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                            .stroke(Color.red.opacity(0.25), lineWidth: 1)
+                                    )
+                            }
+
+                            outputCard
+                                .frame(maxHeight: .infinity)
+                                .id(tab.id)
+
+                            composerDock
+                        }
+                        .frame(maxWidth: .infinity)
+                        .overlay(alignment: .topLeading) {
+                            if showPinnedQuestionsPanel {
+                                PinnedQuestionsStackView(tab: tab, onClose: { showPinnedQuestionsPanel = false })
+                                    .padding(.top, 8)
+                                    .padding(.leading, 4)
+                            }
+                        }
                     }
-
-                    outputCard
-                        .frame(maxHeight: .infinity)
-                        .id(tab.id)
-
-                    composerDock
                 }
                 .frame(maxWidth: .infinity)
-                .overlay(alignment: .topLeading) {
-                    if showPinnedQuestionsPanel {
-                        PinnedQuestionsStackView(tab: tab, onClose: { showPinnedQuestionsPanel = false })
-                            .padding(.top, 8)
-                            .padding(.leading, 4)
-                    }
-                }
             }
         }
         .padding(16)
-        .frame(minWidth: 360, maxWidth: .infinity, minHeight: 400, maxHeight: .infinity)
+        .frame(minWidth: isMainContentCollapsed ? 260 : 360, maxWidth: .infinity, minHeight: isMainContentCollapsed ? 280 : 400, maxHeight: .infinity)
         .background(CursorTheme.panelGradient)
         .onKeyPress(.tab) {
             if isPromptFirstResponder?() == true {
@@ -222,6 +240,13 @@ struct PopoutView: View {
         }
         .overlay(
             Group {
+                Button("Settings") {
+                    appState.showSettingsSheet = true
+                }
+                .keyboardShortcut(",", modifiers: .command)
+                .opacity(0)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+
                 Button("New Tab") {
                     addNewAgentTab(lastWorkspacePath: tab.workspacePath)
                 }
@@ -253,35 +278,65 @@ struct PopoutView: View {
                 .keyboardShortcut("c", modifiers: .control)
                 .opacity(0)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+                Button("Toggle main window") {
+                    withAnimation(.easeInOut(duration: 0.2)) { appState.isMainContentCollapsed.toggle() }
+                }
+                .keyboardShortcut("b", modifiers: .command)
+                .opacity(0)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+                Button("Toggle main window") {
+                    withAnimation(.easeInOut(duration: 0.2)) { appState.isMainContentCollapsed.toggle() }
+                }
+                .keyboardShortcut("s", modifiers: .command)
+                .opacity(0)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
+            .allowsHitTesting(false)
         )
     }
 
     // MARK: - Unified header
 
+    /// Light blue used for agent-tab progress spinner; reused for beta badge.
+    private static let agentSpinnerBlue = Color(red: 0.45, green: 0.68, blue: 1.0)
+
     private var topBar: some View {
         HStack(spacing: 14) {
-            HStack(spacing: 12) {
-                BrandAppIconView(size: 30)
+            Image("CursorMetroLogo")
+                .resizable()
+                .aspectRatio(contentMode: .fit)
+                .frame(height: 36)
 
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Cursor+")
-                        .font(.system(size: 19, weight: .semibold))
-                        .foregroundStyle(CursorTheme.textPrimary)
-                }
-                }
+            Text("BETA")
+                .font(.system(size: 9, weight: .semibold))
+                .foregroundStyle(Self.agentSpinnerBlue)
+                .padding(.horizontal, 6)
+                .padding(.vertical, 3)
+                .background(Self.agentSpinnerBlue.opacity(0.18), in: RoundedRectangle(cornerRadius: 4, style: .continuous))
 
             Spacer()
 
-            Button(action: { appState.showSettingsSheet = true }) {
-                Image(systemName: "gearshape")
+            Button(action: { withAnimation(.easeInOut(duration: 0.2)) { appState.isMainContentCollapsed.toggle() } }) {
+                Image(systemName: isMainContentCollapsed ? "chevron.right.2" : "chevron.left.2")
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(CursorTheme.textSecondary)
                     .frame(width: 30, height: 30)
                     .background(CursorTheme.surfaceMuted, in: Circle())
             }
             .buttonStyle(.plain)
-            .help("Open settings")
+
+            if !isMainContentCollapsed {
+                Button(action: { appState.showSettingsSheet = true }) {
+                    Image(systemName: "gearshape")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(CursorTheme.textSecondary)
+                        .frame(width: 30, height: 30)
+                        .background(CursorTheme.surfaceMuted, in: Circle())
+                }
+                .buttonStyle(.plain)
+            }
 
             Button(action: dismiss) {
                 Image(systemName: "minus")
@@ -291,7 +346,6 @@ struct PopoutView: View {
                     .background(CursorTheme.surfaceMuted, in: Circle())
             }
             .buttonStyle(.plain)
-            .help("Minimise to menubar")
         }
     }
 
@@ -362,7 +416,12 @@ struct PopoutView: View {
                                         hasPrompted: !t.turns.isEmpty,
                                         showClose: tabManager.tabs.count > 1,
                                         compact: false,
-                                        onSelect: { tabManager.selectedTabID = t.id },
+                                        onSelect: {
+                                            tabManager.selectedTabID = t.id
+                                            if appState.isMainContentCollapsed {
+                                                withAnimation(.easeInOut(duration: 0.2)) { appState.isMainContentCollapsed = false }
+                                            }
+                                        },
                                         onClose: { requestCloseTab(t) }
                                     )
                                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -376,18 +435,28 @@ struct PopoutView: View {
             .frame(maxHeight: .infinity)
 
             Button(action: { addNewAgentTab(lastWorkspacePath: tab.workspacePath) }) {
-                Image(systemName: "plus")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(CursorTheme.textSecondary)
-                    .frame(width: 32, height: 32)
-                    .frame(maxWidth: .infinity)
-                    .background(CursorTheme.surfaceMuted, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 10, style: .continuous)
-                            .stroke(CursorTheme.border, lineWidth: 1)
-                    )
+                HStack(spacing: 8) {
+                    Image(systemName: "plus")
+                        .font(.system(size: 12, weight: .semibold))
+                    Text("New Agent")
+                        .font(.system(size: 13, weight: .medium))
+                    Spacer(minLength: 4)
+                    Text("⌘T")
+                        .font(.system(size: 11, weight: .medium, design: .rounded))
+                        .foregroundStyle(CursorTheme.textTertiary)
+                }
+                .foregroundStyle(CursorTheme.textSecondary)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 10)
+                .frame(maxWidth: .infinity)
+                .background(CursorTheme.surfaceMuted, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .stroke(CursorTheme.border, lineWidth: 1)
+                )
             }
             .buttonStyle(.plain)
+            .help("New tab (⌘T or ⌘N)")
             .padding(.top, 10)
         }
         .padding(.horizontal, Self.sidebarContentPadding)
@@ -497,6 +566,11 @@ struct PopoutView: View {
                     onCommandsChanged: { quickActionCommands = QuickActionStorage.commandsForWorkspace(workspacePath: tab.workspacePath) }
                 )
                 Spacer()
+                ComposerActionButtonsView(
+                    showPinnedQuestionsPanel: $showPinnedQuestionsPanel,
+                    hasContext: !tab.turns.isEmpty || !tab.prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                    isRunning: tab.isRunning
+                )
                 openInCursorButton
             }
 
@@ -534,7 +608,7 @@ struct PopoutView: View {
                     .frame(height: composerHeight)
 
                     if userPromptDisplayText(from: tab.prompt).isEmpty {
-                        Text("Send message and/or ⌘V to paste one or more screenshots from clipboard")
+                        Text("Send message and/or ⌘V to paste one or more screenshots from clipboard. Press Enter to submit and Shift+Enter for new line.")
                             .font(.system(size: 13, weight: .regular, design: .monospaced))
                             .foregroundStyle(CursorTheme.textTertiary)
                             .padding(.leading, 4)
@@ -567,13 +641,6 @@ struct PopoutView: View {
                         addNewAgentTab(lastWorkspacePath: path)
                         workspacePath = path
                         appState.workspacePath = path
-                    },
-                    onBrowse: {
-                        appState.changeWorkspace { path in
-                            addNewAgentTab(lastWorkspacePath: path)
-                            workspacePath = path
-                            appState.workspacePath = path
-                        }
                     },
                     onOpenMenu: { devFolders = loadDevFolders(rootPath: projectsRootPath) }
                 )
@@ -627,16 +694,15 @@ struct PopoutView: View {
 
                 Spacer()
 
-                ComposerActionButtonsView(
-                    showPinnedQuestionsPanel: $showPinnedQuestionsPanel,
-                    hasContext: !tab.turns.isEmpty || !tab.prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-                    isRunning: tab.isRunning,
+                ContextUsageView(
                     contextUsed: estimatedContextTokens(
                         prompt: tab.prompt,
                         conversationCharacterCount: tab.cachedConversationCharacterCount
                     ).used,
                     contextLimit: AppLimits.contextTokenLimit
                 )
+
+                UsageView()
             }
         }
         .padding(14)
@@ -783,29 +849,74 @@ struct PopoutView: View {
             VStack(alignment: .leading, spacing: 6) {
                 ForEach(tab.followUpQueue) { item in
                     HStack(spacing: 8) {
-                        Text(item.text)
-                            .font(.system(size: 13, weight: .medium))
-                            .foregroundStyle(CursorTheme.textPrimary)
-                            .lineLimit(2)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                        Button(action: {
-                            sendQueuedFollowUpToNewTab(item)
-                        }) {
-                            Image(systemName: "arrow.up.right")
-                                .font(.system(size: 13, weight: .semibold))
+                        if editingFollowUpID == item.id {
+                            TextField("Message", text: $editingFollowUpDraft, axis: .vertical)
+                                .textFieldStyle(.plain)
+                                .font(.system(size: 13, weight: .medium))
+                                .foregroundStyle(CursorTheme.textPrimary)
+                                .lineLimit(2 ... 6)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .onSubmit { applyEditedFollowUp(itemID: item.id) }
+                            Button(action: {
+                                applyEditedFollowUp(itemID: item.id)
+                            }) {
+                                Image(systemName: "checkmark.circle.fill")
+                                    .font(.system(size: 14))
+                                    .foregroundStyle(CursorTheme.textPrimary)
+                            }
+                            .buttonStyle(.plain)
+                            .help("Save")
+                            Button(action: {
+                                editingFollowUpID = nil
+                                editingFollowUpDraft = ""
+                            }) {
+                                Image(systemName: "xmark.circle.fill")
+                                    .font(.system(size: 14))
+                                    .foregroundStyle(CursorTheme.textTertiary)
+                            }
+                            .buttonStyle(.plain)
+                            .help("Cancel")
+                        } else {
+                            Text(item.text)
+                                .font(.system(size: 13, weight: .medium))
+                                .foregroundStyle(CursorTheme.textPrimary)
+                                .lineLimit(2)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                            Button(action: {
+                                sendQueuedFollowUpToNewTab(item)
+                            }) {
+                                HStack(spacing: 5) {
+                                    Image(systemName: "arrow.up.right")
+                                        .font(.system(size: 13, weight: .semibold))
+                                    Text("New Agent")
+                                        .font(.system(size: 12, weight: .medium))
+                                }
                                 .foregroundStyle(CursorTheme.textSecondary)
-                                .frame(width: 24, height: 24)
-                                .background(CursorTheme.surfaceRaised, in: Circle())
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 6)
+                                .background(CursorTheme.surfaceRaised, in: Capsule())
+                            }
+                            .buttonStyle(.plain)
+                            .help("Send to new agent")
+                            Button(action: {
+                                editingFollowUpID = item.id
+                                editingFollowUpDraft = item.text
+                            }) {
+                                Image(systemName: "pencil")
+                                    .font(.system(size: 13, weight: .medium))
+                                    .foregroundStyle(CursorTheme.textSecondary)
+                            }
+                            .buttonStyle(.plain)
+                            .help("Edit message")
+                            Button(action: {
+                                tab.followUpQueue.removeAll { $0.id == item.id }
+                            }) {
+                                Image(systemName: "xmark.circle.fill")
+                                    .font(.system(size: 14))
+                                    .foregroundStyle(CursorTheme.textTertiary)
+                            }
+                            .buttonStyle(.plain)
                         }
-                        .buttonStyle(.plain)
-                        Button(action: {
-                            tab.followUpQueue.removeAll { $0.id == item.id }
-                        }) {
-                            Image(systemName: "xmark.circle.fill")
-                                .font(.system(size: 14))
-                                .foregroundStyle(CursorTheme.textTertiary)
-                        }
-                        .buttonStyle(.plain)
                     }
                     .padding(.horizontal, 10)
                     .padding(.vertical, 6)
@@ -813,6 +924,23 @@ struct PopoutView: View {
                 }
             }
         }
+    }
+
+    private func applyEditedFollowUp(itemID: UUID) {
+        guard let idx = tab.followUpQueue.firstIndex(where: { $0.id == itemID }) else {
+            editingFollowUpID = nil
+            editingFollowUpDraft = ""
+            return
+        }
+        let trimmed = editingFollowUpDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty {
+            tab.followUpQueue.remove(at: idx)
+        } else {
+            let existing = tab.followUpQueue[idx]
+            tab.followUpQueue[idx] = QueuedFollowUp(id: existing.id, text: trimmed)
+        }
+        editingFollowUpID = nil
+        editingFollowUpDraft = ""
     }
 
     private var canSend: Bool {
