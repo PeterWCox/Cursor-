@@ -30,6 +30,8 @@ struct PopoutView: View {
     @State private var showCreateDebugScriptSheet: Bool = false
     /// When set, show "Are you sure?" before closing this tab (agent still processing).
     @State private var closeTabConfirmationTabID: UUID? = nil
+    /// Workspace paths for groups that are collapsed in the sidebar (accordion).
+    @State private var collapsedGroupPaths: Set<String> = []
 
     private var tab: AgentTab { tabManager.activeTab }
 
@@ -300,50 +302,71 @@ struct PopoutView: View {
             ScrollView(.vertical, showsIndicators: false) {
                 VStack(alignment: .leading, spacing: 10) {
                     ForEach(tabGroups, id: \.path) { group in
+                        let isCollapsed = collapsedGroupPaths.contains(group.path)
                         VStack(alignment: .leading, spacing: 6) {
-                            VStack(alignment: .leading, spacing: 2) {
-                                HStack(spacing: 4) {
-                                    if !group.path.isEmpty {
-                                        ProjectIconView(path: group.path)
-                                            .frame(width: 10, height: 10)
+                            Button {
+                                withAnimation(.easeInOut(duration: 0.2)) {
+                                    if isCollapsed {
+                                        collapsedGroupPaths.remove(group.path)
+                                    } else {
+                                        collapsedGroupPaths.insert(group.path)
                                     }
-                                    Text(group.displayName)
-                                        .font(.system(size: 10, weight: .semibold))
-                                        .foregroundStyle(CursorTheme.colorForWorkspace(path: group.path))
+                                }
+                            } label: {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    HStack(spacing: 4) {
+                                        Image(systemName: isCollapsed ? "chevron.right" : "chevron.down")
+                                            .font(.system(size: 8, weight: .semibold))
+                                            .foregroundStyle(CursorTheme.textTertiary)
+                                            .frame(width: 10, alignment: .leading)
+                                        if !group.path.isEmpty {
+                                            ProjectIconView(path: group.path)
+                                                .frame(width: 10, height: 10)
+                                        }
+                                        Text(group.displayName)
+                                            .font(.system(size: 10, weight: .semibold))
+                                            .foregroundStyle(CursorTheme.colorForWorkspace(path: group.path))
+                                            .lineLimit(1)
+                                            .truncationMode(.middle)
+                                    }
+                                    let groupBranch = group.path == tab.workspacePath ? currentBranch : (group.tabs.first?.currentBranch ?? "")
+                                    if !groupBranch.isEmpty && !isCollapsed {
+                                        HStack(spacing: 4) {
+                                            Image(systemName: "arrow.triangle.branch")
+                                                .font(.system(size: 8, weight: .medium))
+                                            Text(groupBranch)
+                                                .font(.system(size: 9, weight: .regular))
+                                                .italic()
+                                        }
+                                        .foregroundStyle(CursorTheme.textTertiary)
                                         .lineLimit(1)
                                         .truncationMode(.middle)
-                                }
-                                let groupBranch = group.path == tab.workspacePath ? currentBranch : (group.tabs.first?.currentBranch ?? "")
-                                if !groupBranch.isEmpty {
-                                    HStack(spacing: 4) {
-                                        Image(systemName: "arrow.triangle.branch")
-                                            .font(.system(size: 8, weight: .medium))
-                                        Text(groupBranch)
-                                            .font(.system(size: 9, weight: .regular))
-                                            .italic()
+                                        .padding(.leading, 14)
                                     }
-                                    .foregroundStyle(CursorTheme.textTertiary)
-                                    .lineLimit(1)
-                                    .truncationMode(.middle)
                                 }
-                            }
-                            ForEach(group.tabs) { t in
-                                let isSelected = t.id == tabManager.selectedTabID
-                                TabChip(
-                                    title: t.title,
-                                    subtitle: nil,
-                                    workspacePath: nil,
-                                    branchName: nil,
-                                    isSelected: isSelected,
-                                    isRunning: t.isRunning,
-                                    latestTurnState: t.turns.last?.displayState,
-                                    hasPrompted: !t.turns.isEmpty,
-                                    showClose: tabManager.tabs.count > 1,
-                                    compact: false,
-                                    onSelect: { tabManager.selectedTabID = t.id },
-                                    onClose: { requestCloseTab(t) }
-                                )
                                 .frame(maxWidth: .infinity, alignment: .leading)
+                                .contentShape(Rectangle())
+                            }
+                            .buttonStyle(.plain)
+                            if !isCollapsed {
+                                ForEach(group.tabs) { t in
+                                    let isSelected = t.id == tabManager.selectedTabID
+                                    TabChip(
+                                        title: t.title,
+                                        subtitle: nil,
+                                        workspacePath: nil,
+                                        branchName: nil,
+                                        isSelected: isSelected,
+                                        isRunning: t.isRunning,
+                                        latestTurnState: t.turns.last?.displayState,
+                                        hasPrompted: !t.turns.isEmpty,
+                                        showClose: tabManager.tabs.count > 1,
+                                        compact: false,
+                                        onSelect: { tabManager.selectedTabID = t.id },
+                                        onClose: { requestCloseTab(t) }
+                                    )
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                }
                             }
                         }
                     }
