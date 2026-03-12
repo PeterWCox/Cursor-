@@ -183,7 +183,7 @@ private struct GeneralSettingsPaneView: View {
 // MARK: - About pane (placeholder + GitHub)
 
 private struct AboutPaneView: View {
-    private let githubURL = "https://github.com/PeterWCox/CursorMetro"
+    private let githubURL = "https://github.com/cursor-macosapp/cursor-macosapp"
 
     var body: some View {
         ScrollView(.vertical, showsIndicators: true) {

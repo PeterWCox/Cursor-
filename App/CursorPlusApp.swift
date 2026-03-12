@@ -144,6 +144,8 @@ private final class StatusItemView: NSView {
 private let collapsedPanelWidth: CGFloat = 310
 /// Minimum height when collapsed so the window can shrink and avoid empty space below the sidebar.
 private let collapsedPanelMinHeight: CGFloat = 280
+/// Minimum width when expanded; prevents shrinking below a usable size (e.g. comfortable on 14" MacBook).
+private let minExpandedPanelWidth: CGFloat = 440
 
 class AppDelegate: NSObject, NSApplicationDelegate {
     var statusItem: NSStatusItem!
@@ -217,9 +219,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         } else {
             style.insert(.resizable)
             panel.styleMask = style
-            panel.contentMinSize = NSSize(width: 360, height: 400)
+            panel.contentMinSize = NSSize(width: minExpandedPanelWidth, height: 400)
             var frame = panel.frame
-            frame.size.width = max(360, savedExpandedPanelWidth)
+            frame.size.width = max(minExpandedPanelWidth, savedExpandedPanelWidth)
             if let h = savedExpandedPanelHeight, h >= 400 {
                 frame.size.height = h
             }
@@ -276,13 +278,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 panel.contentMinSize = NSSize(width: collapsedPanelWidth, height: 400)
             } else {
                 // Keep agent tabs sidebar full width: never allow window narrower than sidebar + min agent area.
-                let minExpandedWidth: CGFloat = 360
-                if panel.frame.width < minExpandedWidth {
+                if panel.frame.width < minExpandedPanelWidth {
                     var frame = panel.frame
-                    frame.size.width = minExpandedWidth
+                    frame.size.width = minExpandedPanelWidth
                     panel.setFrame(frame, display: false)
                 }
-                panel.contentMinSize = NSSize(width: minExpandedWidth, height: 400)
+                panel.contentMinSize = NSSize(width: minExpandedPanelWidth, height: 400)
             }
         } else {
             positionNearStatusItem()
@@ -350,7 +351,7 @@ class FloatingPanel: NSPanel {
         acceptsMouseMovedEvents = true
         isReleasedWhenClosed = false
         animationBehavior = .utilityWindow
-        contentMinSize = NSSize(width: 360, height: 400)
+        contentMinSize = NSSize(width: minExpandedPanelWidth, height: 400)
         contentMaxSize = NSSize(width: 1400, height: 1600)
         if Self.hasSavedFrame(), let frame = PanelFrameStorage.load() {
             setFrame(frame, display: false)

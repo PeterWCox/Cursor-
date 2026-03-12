@@ -2,14 +2,14 @@
   "version": "2.0.0",
   "tasks": [
     {
-      "label": "Build Cursor+",
+      "label": "Build Cursor Metro",
       "type": "shell",
       "command": "xcodebuild",
       "args": [
         "-project",
-        "${workspaceFolder}/Cursor+.xcodeproj",
+        "${workspaceFolder}/CursorMetro.xcodeproj",
         "-scheme",
-        "Cursor+",
+        "CursorMetro",
         "-configuration",
         "Debug",
         "build"
@@ -25,19 +25,19 @@
       }
     },
     {
-      "label": "Build and Run Cursor+",
+      "label": "Build and Run Cursor Metro",
       "type": "shell",
       "command": "xcodebuild",
       "args": [
         "-project",
-        "${workspaceFolder}/Cursor+.xcodeproj",
+        "${workspaceFolder}/CursorMetro.xcodeproj",
         "-scheme",
-        "Cursor+",
+        "CursorMetro",
         "-configuration",
         "Debug",
         "build"
       ],
-      "dependsOn": "Build Cursor+",
+      "dependsOn": "Build Cursor Metro",
       "problemMatcher": ["$xcodebuild"]
     }
   ]
