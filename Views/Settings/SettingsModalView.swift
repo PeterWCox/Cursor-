@@ -143,44 +143,13 @@ private struct SettingsPaneContainer<Content: View>: View {
 private struct GeneralSettingsPaneContent: View {
     @Environment(\.colorScheme) private var colorScheme
     @AppStorage(AppPreferences.projectsRootPathKey) private var projectsRootPath: String = AppPreferences.defaultProjectsRootPath
-    @AppStorage(AppPreferences.preferredAppearanceKey) private var preferredAppearanceRaw: String = AppPreferences.defaultPreferredAppearance
 
     private var resolvedProjectsRootPath: String {
         AppPreferences.resolvedProjectsRootPath(projectsRootPath)
     }
 
-    private var preferredAppearance: PreferredAppearance {
-        PreferredAppearance(rawValue: preferredAppearanceRaw) ?? .system
-    }
-
     var body: some View {
         VStack(alignment: .leading, spacing: 24) {
-            // Appearance
-            VStack(alignment: .leading, spacing: 12) {
-                Text("Appearance")
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(CursorTheme.textTertiary(for: colorScheme))
-                    .textCase(.uppercase)
-                    .tracking(0.6)
-
-                Text("Choose light mode, dark mode, or follow the system setting.")
-                    .font(.system(size: 14))
-                    .foregroundStyle(CursorTheme.textSecondary(for: colorScheme))
-                    .fixedSize(horizontal: false, vertical: true)
-
-                Picker("", selection: Binding(
-                    get: { preferredAppearance },
-                    set: { preferredAppearanceRaw = $0.rawValue }
-                )) {
-                    ForEach(PreferredAppearance.allCases) { appearance in
-                        Text(appearance.displayName).tag(appearance)
-                    }
-                }
-                .pickerStyle(.segmented)
-                .labelsHidden()
-                .frame(maxWidth: 320)
-            }
-
             VStack(alignment: .leading, spacing: 12) {
                 Text("Project picker root")
                         .font(.system(size: 11, weight: .semibold))

@@ -100,17 +100,13 @@ struct PopoutView: View {
     @AppStorage(AppPreferences.projectsRootPathKey) private var projectsRootPath: String = AppPreferences.defaultProjectsRootPath
     @AppStorage(AppPreferences.preferredTerminalAppKey) private var preferredTerminalAppRawValue: String = PreferredTerminalApp.automatic.rawValue
     @AppStorage(AppPreferences.disabledModelIdsKey) private var disabledModelIdsRaw: String = AppPreferences.defaultDisabledModelIdsRaw
-    @AppStorage(AppPreferences.preferredAppearanceKey) private var preferredAppearanceRaw: String = AppPreferences.defaultPreferredAppearance
     @AppStorage("selectedModel") private var selectedModel: String = AvailableModels.autoID
     @AppStorage("messagesSentForUsage") private var messagesSentForUsage: Int = 0
     @AppStorage("showPinnedQuestionsPanel") private var showPinnedQuestionsPanel: Bool = true
     @EnvironmentObject var tabManager: TabManager
 
-    /// Resolved color scheme from Settings (Dark / Light / System). Nil means follow system.
-    private var resolvedColorScheme: ColorScheme? {
-        let p = PreferredAppearance(rawValue: preferredAppearanceRaw) ?? .system
-        return p == .system ? nil : (p == .dark ? .dark : .light)
-    }
+    /// App always uses dark mode; theme picker is disabled.
+    private var resolvedColorScheme: ColorScheme? { .dark }
     @State private var devFolders: [URL] = []
     @State private var gitBranches: [String] = []
     @State private var currentBranch: String = ""
