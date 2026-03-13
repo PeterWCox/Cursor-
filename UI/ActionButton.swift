@@ -1,8 +1,11 @@
 import SwiftUI
 
 // MARK: - Reusable capsule action button (icon + title)
+// Use for consistent primary/secondary actions across the app.
 
 struct ActionButton: View {
+    @Environment(\.colorScheme) private var colorScheme
+
     var title: String
     var icon: String? = nil  // SF Symbol name
     var action: () -> Void
@@ -26,11 +29,11 @@ struct ActionButton: View {
                     .fixedSize(horizontal: true, vertical: false)
             }
             .font(.system(size: 12, weight: .medium))
-            .foregroundStyle(style == .primary ? CursorTheme.textPrimary : CursorTheme.textSecondary)
+            .foregroundStyle(style == .primary ? CursorTheme.textPrimary(for: colorScheme) : CursorTheme.textSecondary(for: colorScheme))
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
             .background(backgroundFill, in: Capsule())
-            .overlay(Capsule().stroke(CursorTheme.border, lineWidth: 1))
+            .overlay(Capsule().stroke(CursorTheme.border(for: colorScheme), lineWidth: 1))
         }
         .buttonStyle(.plain)
         .disabled(isDisabled)
@@ -39,8 +42,8 @@ struct ActionButton: View {
 
     private var backgroundFill: Color {
         switch style {
-        case .primary: return CursorTheme.surfaceMuted
-        case .secondary: return CursorTheme.surfaceMuted.opacity(0.7)
+        case .primary: return CursorTheme.surfaceMuted(for: colorScheme)
+        case .secondary: return CursorTheme.surfaceMuted(for: colorScheme).opacity(0.7)
         }
     }
 }

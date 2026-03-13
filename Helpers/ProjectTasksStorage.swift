@@ -11,20 +11,20 @@ struct ProjectTask: Identifiable, Codable, Equatable {
     var completed: Bool
     /// When the task was marked completed; nil if not completed or completed before this field existed.
     var completedAt: Date?
-    /// Relative path under .cursormetro (e.g. "screenshots/<id>.png") for task screenshot.
-    var screenshotPath: String?
+    /// Relative paths under .cursormetro (e.g. "screenshots/<id>_0.png") for task screenshots. Empty = no screenshots.
+    var screenshotPaths: [String]
 
-    init(id: UUID = UUID(), content: String, createdAt: Date = Date(), completed: Bool = false, completedAt: Date? = nil, screenshotPath: String? = nil) {
+    init(id: UUID = UUID(), content: String, createdAt: Date = Date(), completed: Bool = false, completedAt: Date? = nil, screenshotPaths: [String] = []) {
         self.id = id
         self.content = content
         self.createdAt = createdAt
         self.completed = completed
         self.completedAt = completedAt
-        self.screenshotPath = screenshotPath
+        self.screenshotPaths = screenshotPaths
     }
 
     enum CodingKeys: String, CodingKey {
-        case id, content, createdAt, completed, completedAt, screenshotPath
+        case id, content, createdAt, completed, completedAt, screenshotPath, screenshotPaths
     }
 
     init(from decoder: Decoder) throws {
@@ -34,7 +34,13 @@ struct ProjectTask: Identifiable, Codable, Equatable {
         createdAt = try c.decode(Date.self, forKey: .createdAt)
         completed = try c.decode(Bool.self, forKey: .completed)
         completedAt = try c.decodeIfPresent(Date.self, forKey: .completedAt)
-        screenshotPath = try c.decodeIfPresent(String.self, forKey: .screenshotPath)
+        if let paths = try c.decodeIfPresent([String].self, forKey: .screenshotPaths) {
+            screenshotPaths = paths
+        } else if let single = try c.decodeIfPresent(String.self, forKey: .screenshotPath) {
+            screenshotPaths = [single]
+        } else {
+            screenshotPaths = []
+        }
     }
 
     func encode(to encoder: Encoder) throws {
@@ -44,7 +50,7 @@ struct ProjectTask: Identifiable, Codable, Equatable {
         try c.encode(createdAt, forKey: .createdAt)
         try c.encode(completed, forKey: .completed)
         try c.encodeIfPresent(completedAt, forKey: .completedAt)
-        try c.encodeIfPresent(screenshotPath, forKey: .screenshotPath)
+        try c.encode(screenshotPaths, forKey: .screenshotPaths)
     }
 }
 
@@ -94,21 +100,23 @@ enum ProjectTasksStorage {
         load(workspacePath: workspacePath).tasks.sorted { $0.createdAt < $1.createdAt }
     }
 
-    static func addTask(workspacePath: String, content: String, screenshotImage: NSImage? = nil) -> ProjectTask {
+    static func addTask(workspacePath: String, content: String, screenshotImages: [NSImage] = []) -> ProjectTask {
         var file = load(workspacePath: workspacePath)
         var task = ProjectTask(content: content)
-        if let image = screenshotImage {
-            let relPath = "screenshots/\(task.id.uuidString).png"
-            let dir = screenshotsDirectoryURL(workspacePath: workspacePath)
-            try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-            let fileURL = dir.appendingPathComponent("\(task.id.uuidString).png")
+        let dir = screenshotsDirectoryURL(workspacePath: workspacePath)
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        var paths: [String] = []
+        for (index, image) in screenshotImages.enumerated() {
+            let relPath = "screenshots/\(task.id.uuidString)_\(index).png"
+            let fileURL = dir.appendingPathComponent("\(task.id.uuidString)_\(index).png")
             if let tiff = image.tiffRepresentation,
                let bitmap = NSBitmapImageRep(data: tiff),
                let pngData = bitmap.representation(using: .png, properties: [:]) {
                 try? pngData.write(to: fileURL)
-                task.screenshotPath = relPath
+                paths.append(relPath)
             }
         }
+        task.screenshotPaths = paths
         file.tasks.append(task)
         save(workspacePath: workspacePath, file)
         return task
@@ -125,35 +133,46 @@ enum ProjectTasksStorage {
         save(workspacePath: workspacePath, file)
     }
 
-    /// Update only the task's screenshot: save image to .cursormetro/screenshots/<id>.png or remove if nil.
-    static func updateTaskScreenshot(workspacePath: String, id: UUID, image: NSImage?) {
+    /// Update the task's screenshots: save images to .cursormetro/screenshots/<id>_0.png, _1.png, etc.; remove any old files not in the new set.
+    static func updateTaskScreenshots(workspacePath: String, id: UUID, images: [NSImage]) {
         var file = load(workspacePath: workspacePath)
         guard let index = file.tasks.firstIndex(where: { $0.id == id }) else { return }
-        let relPath = "screenshots/\(id.uuidString).png"
         let dir = screenshotsDirectoryURL(workspacePath: workspacePath)
-        let fileURL = dir.appendingPathComponent("\(id.uuidString).png")
-
-        if let img = image {
-            try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let oldPaths = file.tasks[index].screenshotPaths
+        var newPaths: [String] = []
+        for (i, img) in images.enumerated() {
+            let relPath = "screenshots/\(id.uuidString)_\(i).png"
+            let fileURL = dir.appendingPathComponent("\(id.uuidString)_\(i).png")
             if let tiff = img.tiffRepresentation,
                let bitmap = NSBitmapImageRep(data: tiff),
                let pngData = bitmap.representation(using: .png, properties: [:]) {
                 try? pngData.write(to: fileURL)
-                file.tasks[index].screenshotPath = relPath
-            }
-        } else {
-            if file.tasks[index].screenshotPath != nil {
-                try? FileManager.default.removeItem(at: fileURL)
-                file.tasks[index].screenshotPath = nil
+                newPaths.append(relPath)
             }
         }
+        for oldPath in oldPaths where !newPaths.contains(oldPath) {
+            let url = taskScreenshotFileURL(workspacePath: workspacePath, screenshotPath: oldPath)
+            try? FileManager.default.removeItem(at: url)
+        }
+        file.tasks[index].screenshotPaths = newPaths
+        save(workspacePath: workspacePath, file)
+    }
+
+    /// Remove one screenshot by path and delete its file.
+    static func removeTaskScreenshot(workspacePath: String, id: UUID, screenshotPath: String) {
+        var file = load(workspacePath: workspacePath)
+        guard let index = file.tasks.firstIndex(where: { $0.id == id }) else { return }
+        file.tasks[index].screenshotPaths.removeAll { $0 == screenshotPath }
+        let url = taskScreenshotFileURL(workspacePath: workspacePath, screenshotPath: screenshotPath)
+        try? FileManager.default.removeItem(at: url)
         save(workspacePath: workspacePath, file)
     }
 
     static func deleteTask(workspacePath: String, id: UUID) {
         var file = load(workspacePath: workspacePath)
         guard let index = file.tasks.firstIndex(where: { $0.id == id }) else { return }
-        if let path = file.tasks[index].screenshotPath {
+        for path in file.tasks[index].screenshotPaths {
             let url = taskScreenshotFileURL(workspacePath: workspacePath, screenshotPath: path)
             try? FileManager.default.removeItem(at: url)
         }

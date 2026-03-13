@@ -41,7 +41,7 @@ struct ComposerActionButtonsView: View {
 }
 
 // MARK: - Context usage (used on picker row in PopoutView)
-private let contextWheelBlue = Color(red: 0.45, green: 0.68, blue: 1.0)
+private let contextWheelBlue = CursorTheme.spinnerBlue
 
 struct ContextUsageView: View {
     var contextUsed: Int

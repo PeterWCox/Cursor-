@@ -20,6 +20,7 @@ private struct ObservedTabView<Content: View>: View {
 
 /// Sidebar chip for a terminal tab (terminal icon + title).
 private struct TerminalTabChip: View {
+    @Environment(\.colorScheme) private var colorScheme
     let terminalTab: TerminalTab
     let isSelected: Bool
     let onSelect: () -> Void
@@ -30,17 +31,17 @@ private struct TerminalTabChip: View {
             HStack(spacing: 6) {
                 Image(systemName: "terminal")
                     .font(.system(size: 12))
-                    .foregroundStyle(isSelected ? CursorTheme.textPrimary : CursorTheme.textSecondary)
+                    .foregroundStyle(isSelected ? CursorTheme.textPrimary(for: colorScheme) : CursorTheme.textSecondary(for: colorScheme))
                 Text(terminalTab.title)
                     .font(.system(size: 12, weight: isSelected ? .semibold : .medium))
-                    .foregroundStyle(isSelected ? CursorTheme.textPrimary : CursorTheme.textSecondary)
+                    .foregroundStyle(isSelected ? CursorTheme.textPrimary(for: colorScheme) : CursorTheme.textSecondary(for: colorScheme))
                     .lineLimit(1)
                     .truncationMode(.tail)
                     .frame(maxWidth: .infinity, alignment: .leading)
                 Button(action: onClose) {
                     Image(systemName: "xmark")
                         .font(.system(size: 8, weight: .bold))
-                        .foregroundStyle(CursorTheme.textTertiary)
+                        .foregroundStyle(CursorTheme.textTertiary(for: colorScheme))
                         .frame(width: 16, height: 16)
                         .contentShape(Rectangle())
                 }
@@ -49,12 +50,12 @@ private struct TerminalTabChip: View {
             .padding(.horizontal, 12)
             .padding(.vertical, 7)
             .background(
-                isSelected ? CursorTheme.surfaceRaised : CursorTheme.surfaceMuted,
+                isSelected ? CursorTheme.surfaceRaised(for: colorScheme) : CursorTheme.surfaceMuted(for: colorScheme),
                 in: RoundedRectangle(cornerRadius: 10, style: .continuous)
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .stroke(isSelected ? CursorTheme.borderStrong : CursorTheme.border.opacity(0.6), lineWidth: 1)
+                    .stroke(isSelected ? CursorTheme.borderStrong(for: colorScheme) : CursorTheme.border(for: colorScheme).opacity(0.6), lineWidth: 1)
             )
         }
         .buttonStyle(.plain)
@@ -93,15 +94,23 @@ private struct ObservedTabChip: View {
 
 struct PopoutView: View {
     @EnvironmentObject var appState: AppState
+    @Environment(\.colorScheme) private var colorScheme
     var dismiss: () -> Void = {}
     @AppStorage("workspacePath") private var workspacePath: String = FileManager.default.homeDirectoryForCurrentUser.path
     @AppStorage(AppPreferences.projectsRootPathKey) private var projectsRootPath: String = AppPreferences.defaultProjectsRootPath
     @AppStorage(AppPreferences.preferredTerminalAppKey) private var preferredTerminalAppRawValue: String = PreferredTerminalApp.automatic.rawValue
     @AppStorage(AppPreferences.disabledModelIdsKey) private var disabledModelIdsRaw: String = AppPreferences.defaultDisabledModelIdsRaw
+    @AppStorage(AppPreferences.preferredAppearanceKey) private var preferredAppearanceRaw: String = AppPreferences.defaultPreferredAppearance
     @AppStorage("selectedModel") private var selectedModel: String = AvailableModels.autoID
     @AppStorage("messagesSentForUsage") private var messagesSentForUsage: Int = 0
     @AppStorage("showPinnedQuestionsPanel") private var showPinnedQuestionsPanel: Bool = true
     @EnvironmentObject var tabManager: TabManager
+
+    /// Resolved color scheme from Settings (Dark / Light / System). Nil means follow system.
+    private var resolvedColorScheme: ColorScheme? {
+        let p = PreferredAppearance(rawValue: preferredAppearanceRaw) ?? .system
+        return p == .system ? nil : (p == .dark ? .dark : .light)
+    }
     @State private var devFolders: [URL] = []
     @State private var gitBranches: [String] = []
     @State private var currentBranch: String = ""
@@ -160,45 +169,33 @@ struct PopoutView: View {
         return .open
     }
 
+    /// Status of a task in this workspace if any agent tab is linked to it (for badge on task row).
+    private func linkedTaskStatusForTask(taskID: UUID, workspacePath: String) -> LinkedTaskStatus? {
+        guard let tab = tabManager.tabs.first(where: { $0.workspacePath == workspacePath && $0.linkedTaskID == taskID }) else { return nil }
+        return linkedTaskStatus(for: tab)
+    }
+
     private func tasksListContent(tasksPath: String, triggerAddNewTask: Binding<Bool>) -> some View {
         TasksListView(
             workspacePath: tasksPath,
             triggerAddNewTask: triggerAddNewTask,
-            onSendToAgent: { prompt, taskID in
-                if let newTab = addNewAgentTab(initialPrompt: prompt, lastWorkspacePath: tasksPath) {
+            linkedStatusForTaskID: { taskID in linkedTaskStatusForTask(taskID: taskID, workspacePath: tasksPath) },
+            onSendToAgent: { prompt, taskID, screenshotPaths in
+                var initialPrompt = prompt
+                for path in screenshotPaths {
+                    initialPrompt += "\n\n[Screenshot attached: .cursormetro/\(path)]"
+                }
+                if let newTab = addNewAgentTab(initialPrompt: initialPrompt, lastWorkspacePath: tasksPath) {
                     if let taskID = taskID {
                         newTab.linkedTaskID = taskID
+                    }
+                    if !screenshotPaths.isEmpty {
+                        newTab.hasAttachedScreenshot = true
                     }
                 }
                 tabManager.hideTasksView()
             },
-            onDismiss: { tabManager.hideTasksView() },
-            agentsForWorkspace: tabManager.tabs.filter { $0.workspacePath == tasksPath },
-            isTaskLinked: { taskID in
-                tabManager.tabs.contains(where: { $0.linkedTaskID == taskID })
-            },
-            linkedTaskStatusForTaskID: { taskID in
-                guard let tab = tabManager.tabs.first(where: { $0.workspacePath == tasksPath && $0.linkedTaskID == taskID }) else { return nil }
-                if tab.isRunning { return .processing }
-                let tasks = ProjectTasksStorage.tasks(workspacePath: tasksPath)
-                guard let task = tasks.first(where: { $0.id == taskID }) else { return nil }
-                if task.completed { return .done }
-                if tab.turns.last?.displayState == .stopped { return .stopped }
-                return .open
-            },
-            onLinkTaskToAgent: { task, agent in
-                agent.linkedTaskID = task.id
-                tabManager.selectedTabID = agent.id
-                tabManager.selectedTerminalID = nil
-                tabManager.selectedTasksViewPath = nil
-                tabManager.selectedProjectPath = agent.workspacePath
-                if appState.isMainContentCollapsed {
-                    withAnimation(.easeInOut(duration: 0.2)) { appState.isMainContentCollapsed = false }
-                }
-            },
-            onUnlinkTask: { taskID in
-                tabManager.tabs.first(where: { $0.linkedTaskID == taskID })?.linkedTaskID = nil
-            }
+            onDismiss: { tabManager.hideTasksView() }
         )
         .id(tasksPath)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -317,9 +314,10 @@ struct PopoutView: View {
         PreferredTerminalApp(rawValue: preferredTerminalAppRawValue) ?? .automatic
     }
 
-    /// Models to show in the picker (respects "disabled" preference). Includes current selection if it was hidden so the UI stays consistent.
+    /// Models to show in the picker (respects "disabled" preference; uses default-enabled set when never set). Includes current selection if it was hidden so the UI stays consistent.
     private var modelPickerModels: [ModelOption] {
-        let disabled = AppPreferences.disabledModelIds(from: disabledModelIdsRaw)
+        let allIds = Set(appState.availableModels.map(\.id))
+        let disabled = AppPreferences.effectiveDisabledModelIds(allIds: allIds, raw: disabledModelIdsRaw)
         var visible = appState.visibleModels(disabledIds: disabled)
         if !visible.contains(where: { $0.id == selectedModel }), let current = appState.model(for: selectedModel) {
             visible = visible + [current]
@@ -361,7 +359,7 @@ struct PopoutView: View {
                 .padding(.bottom, 14)
                 .overlay(alignment: .bottom) {
                     Rectangle()
-                        .fill(CursorTheme.border.opacity(0.9))
+                        .fill(CursorTheme.border(for: colorScheme).opacity(0.9))
                         .frame(height: 1)
                 }
 
@@ -422,7 +420,8 @@ struct PopoutView: View {
         }
         .padding(16)
         .frame(minWidth: isMainContentCollapsed ? 260 : (sidebarWidth + 110), maxWidth: .infinity, minHeight: isMainContentCollapsed ? 280 : 400, maxHeight: .infinity)
-        .background(CursorTheme.panelGradient)
+        .preferredColorScheme(resolvedColorScheme)
+        .background(CursorTheme.panelGradient(for: colorScheme))
         .onKeyPress(.tab) {
             if isPromptFirstResponder?() == true {
                 return .ignored
@@ -634,9 +633,9 @@ struct PopoutView: View {
     // MARK: - Unified header
 
     /// Light blue used for agent-tab progress spinner; reused for beta badge.
-    private static let agentSpinnerBlue = Color(red: 0.45, green: 0.68, blue: 1.0)
+    private static let agentSpinnerBlue = CursorTheme.spinnerBlue
     /// Amber for debug build badge (only visible in Debug configuration).
-    private static let debugBadgeAmber = Color(red: 1.0, green: 0.6, blue: 0.2)
+    private static let debugBadgeAmber = CursorTheme.brandAmber
 
     /// True when built with Debug configuration (SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG).
     private static var isDebugBuild: Bool {
@@ -676,67 +675,21 @@ struct PopoutView: View {
             Spacer(minLength: 0)
 
             if isMainContentCollapsed {
-                // Collapsed: 3-dot menu then >> expand.
-                Menu {
+                // Collapsed: 3-dot menu then expand.
+                ThreeDotMenuButton(size: .medium, help: "More options") {
                     Button(action: { appState.showSettingsSheet = true }) {
                         Label("Settings", systemImage: "gearshape")
                     }
                     Button(action: dismiss) {
                         Label("Minimise", systemImage: "minus")
                     }
-                } label: {
-                    Image(systemName: "ellipsis")
-                        .font(.system(size: 12, weight: .semibold))
-                        .symbolRenderingMode(.monochrome)
-                        .foregroundStyle(Color.white)
-                        .frame(width: 30, height: 30)
-                        .background(CursorTheme.surfaceMuted, in: Circle())
                 }
-                .menuStyle(.borderlessButton)
-                .menuIndicator(.hidden)
-                .tint(Color.white)
-                .fixedSize()
-                .help("More options")
 
-                Button(action: { withAnimation(.easeInOut(duration: 0.2)) { appState.isMainContentCollapsed.toggle() } }) {
-                    Image(systemName: "chevron.right.2")
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(CursorTheme.textSecondary)
-                        .frame(width: 30, height: 30)
-                        .background(CursorTheme.surfaceMuted, in: Circle())
-                }
-                .buttonStyle(.plain)
-                .help("Expand")
+                IconButton(icon: "chevron.right.2", action: { withAnimation(.easeInOut(duration: 0.2)) { appState.isMainContentCollapsed.toggle() } }, help: "Expand")
             } else {
-                Button(action: { withAnimation(.easeInOut(duration: 0.2)) { appState.isMainContentCollapsed.toggle() } }) {
-                    Image(systemName: "chevron.left.2")
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(CursorTheme.textSecondary)
-                        .frame(width: 30, height: 30)
-                        .background(CursorTheme.surfaceMuted, in: Circle())
-                }
-                .buttonStyle(.plain)
-                .help("Collapse")
-                Button(action: { appState.showSettingsSheet = true }) {
-                    Image(systemName: "gearshape")
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(CursorTheme.textSecondary)
-                        .frame(width: 30, height: 30)
-                        .background(CursorTheme.surfaceMuted, in: Circle())
-                }
-                .buttonStyle(.plain)
-                .contentShape(Circle())
-                .help("Settings")
-
-                Button(action: dismiss) {
-                    Image(systemName: "minus")
-                        .font(.system(size: 12, weight: .bold))
-                        .foregroundStyle(CursorTheme.textSecondary)
-                        .frame(width: 30, height: 30)
-                        .background(CursorTheme.surfaceMuted, in: Circle())
-                }
-                .buttonStyle(.plain)
-                .help("Minimise")
+                IconButton(icon: "chevron.left.2", action: { withAnimation(.easeInOut(duration: 0.2)) { appState.isMainContentCollapsed.toggle() } }, help: "Collapse")
+                IconButton(icon: "gearshape", action: { appState.showSettingsSheet = true }, help: "Settings")
+                IconButton(icon: "minus", action: dismiss, help: "Minimise")
             }
         }
     }
@@ -805,7 +758,7 @@ struct PopoutView: View {
                                 .padding(.horizontal, 6)
                                 .padding(.vertical, 4)
 
-                                Menu {
+                                ThreeDotMenuButton(size: .small, help: "Project options") {
                                     Button("New Agent") {
                                         addNewAgentTab(lastWorkspacePath: group.path)
                                     }
@@ -842,18 +795,7 @@ struct PopoutView: View {
                                     Button("Remove Project", role: .destructive) {
                                         removeProject(workspacePath: group.path)
                                     }
-                                } label: {
-                                    Image(systemName: "ellipsis")
-                                        .font(.system(size: 12, weight: .semibold))
-                                        .symbolRenderingMode(.monochrome)
-                                        .foregroundStyle(Color.white)
-                                        .frame(width: 24, height: 24)
-                                        .contentShape(Rectangle())
                                 }
-                                .menuStyle(.borderlessButton)
-                                .menuIndicator(.hidden)
-                                .tint(Color.white)
-                                .help("Project options")
                             }
                             if !isCollapsed {
                                 if group.tabs.isEmpty {
@@ -874,7 +816,7 @@ struct PopoutView: View {
                                         .background(CursorTheme.surfaceMuted, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
                                         .overlay(
                                             RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                                .stroke(CursorTheme.border.opacity(0.6), lineWidth: 1)
+                                                .stroke(CursorTheme.border(for: colorScheme).opacity(0.6), lineWidth: 1)
                                         )
                                     }
                                     .buttonStyle(.plain)
@@ -882,7 +824,7 @@ struct PopoutView: View {
                                 ForEach(group.tabs) { t in
                                     ObservedTabChip(
                                         tab: t,
-                                        linkedTaskStatus: nil, // Status shown on task row in Tasks list, not on tab
+                                        linkedTaskStatus: linkedTaskStatus(for: t),
                                         isSelected: t.id == tabManager.selectedTabID,
                                         showClose: true,
                                         onSelect: {
@@ -940,7 +882,7 @@ struct PopoutView: View {
                                     )
                                     .overlay(
                                         RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                            .stroke(isTasksSelected ? CursorTheme.borderStrong : CursorTheme.border.opacity(0.6), lineWidth: 1)
+                                            .stroke(isTasksSelected ? CursorTheme.borderStrong(for: colorScheme) : CursorTheme.border(for: colorScheme).opacity(0.6), lineWidth: 1)
                                     )
                                 }
                                 .buttonStyle(.plain)
@@ -1131,14 +1073,14 @@ struct PopoutView: View {
             if let error = tab.errorMessage {
                 Text(error)
                     .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(Color(red: 1.0, green: 0.64, blue: 0.67))
+                    .foregroundStyle(CursorTheme.semanticErrorTint)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal, 14)
                     .padding(.vertical, 10)
                     .background(cardBackground.opacity(0.96), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
                     .overlay(
                         RoundedRectangle(cornerRadius: 14, style: .continuous)
-                            .stroke(Color.red.opacity(0.25), lineWidth: 1)
+                            .stroke(CursorTheme.semanticError.opacity(0.25), lineWidth: 1)
                     )
             }
 
@@ -1208,7 +1150,7 @@ struct PopoutView: View {
                 .padding(.vertical, 28)
                 .background(
                     RoundedRectangle(cornerRadius: 16, style: .continuous)
-                        .fill(CursorTheme.surfaceMuted.opacity(0.8))
+                        .fill(CursorTheme.surfaceMuted(for: colorScheme).opacity(0.8))
                         .overlay(
                             RoundedRectangle(cornerRadius: 16, style: .continuous)
                                 .stroke(CursorTheme.border, lineWidth: 1)
@@ -1306,7 +1248,8 @@ struct PopoutView: View {
                         onFocusRequested: { focus, isFirstResponder in
                             focusPromptInput = focus
                             isPromptFirstResponder = isFirstResponder
-                        }
+                        },
+                        colorScheme: colorScheme
                     )
                     .frame(height: composerHeight)
 
@@ -1477,7 +1420,7 @@ struct PopoutView: View {
                     .stroke(
                         tab.isRunning
                             ? CursorTheme.borderStrong
-                            : Color.white.opacity(0.14),
+                            : CursorTheme.textPrimary(for: colorScheme).opacity(0.14),
                         lineWidth: 1
                     )
             )
@@ -1587,7 +1530,7 @@ struct PopoutView: View {
                     }
                     .padding(.horizontal, 10)
                     .padding(.vertical, 6)
-                    .background(CursorTheme.surfaceMuted.opacity(0.8), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    .background(CursorTheme.surfaceMuted(for: colorScheme).opacity(0.8), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
                 }
             }
         }

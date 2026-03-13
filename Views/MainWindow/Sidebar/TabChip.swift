@@ -3,7 +3,7 @@ import AppKit
 
 // MARK: - Light blue spinner (SwiftUI ProgressView can ignore tint on macOS)
 
-private let spinnerLightBlue = Color(red: 0.45, green: 0.68, blue: 1.0)
+private let spinnerLightBlue = CursorTheme.spinnerBlue
 
 struct LightBlueSpinner: View {
     var size: CGFloat = 14
@@ -24,6 +24,7 @@ struct LightBlueSpinner: View {
 // MARK: - Tab bar chip (horizontal or vertical with optional subtitle)
 
 struct TabChip: View {
+    @Environment(\.colorScheme) private var colorScheme
     let title: String
     var subtitle: String? = nil
     var subtitleColor: Color? = nil
@@ -59,27 +60,27 @@ struct TabChip: View {
             } else if latestTurnState == .stopped {
                 Image(systemName: "square.fill")
                     .font(.system(size: 11, weight: .bold))
-                    .foregroundStyle(Color.red)
+                    .foregroundStyle(CursorTheme.semanticError)
             } else if hasPrompted {
                 Image(systemName: "checkmark.circle.fill")
                     .font(.system(size: 14))
-                    .foregroundStyle(isSelected ? CursorTheme.brandBlue : CursorTheme.textTertiary)
+                    .foregroundStyle(isSelected ? CursorTheme.brandBlue : CursorTheme.textTertiary(for: colorScheme))
             } else {
                 Image(systemName: "bubble.left")
                     .font(.system(size: 14))
-                    .foregroundStyle(CursorTheme.textTertiary)
+                    .foregroundStyle(CursorTheme.textTertiary(for: colorScheme))
             }
         }
         .frame(width: 28, height: 28)
         .background(
             isSelected
-                ? CursorTheme.surfaceRaised
-                : CursorTheme.surfaceMuted,
+                ? CursorTheme.surfaceRaised(for: colorScheme)
+                : CursorTheme.surfaceMuted(for: colorScheme),
             in: RoundedRectangle(cornerRadius: 8, style: .continuous)
         )
         .overlay(
             RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .stroke(isSelected ? CursorTheme.borderStrong : CursorTheme.border.opacity(0.6), lineWidth: 1)
+                .stroke(isSelected ? CursorTheme.borderStrong(for: colorScheme) : CursorTheme.border(for: colorScheme).opacity(0.6), lineWidth: 1)
         )
     }
 
@@ -90,15 +91,15 @@ struct TabChip: View {
             } else if latestTurnState == .stopped {
                 Image(systemName: "square.fill")
                     .font(.system(size: 9, weight: .bold))
-                    .foregroundStyle(Color.red)
+                    .foregroundStyle(CursorTheme.semanticError)
             } else if hasPrompted {
                 Image(systemName: "checkmark.circle.fill")
                     .font(.system(size: 12))
-                    .foregroundStyle(.green)
+                    .foregroundStyle(CursorTheme.semanticSuccess)
             } else {
                 Image(systemName: "bubble.left")
                     .font(.system(size: 12))
-                    .foregroundStyle(CursorTheme.textTertiary)
+                    .foregroundStyle(CursorTheme.textTertiary(for: colorScheme))
             }
 
             if let sub = subtitle, !sub.isEmpty {
@@ -106,7 +107,7 @@ struct TabChip: View {
                     HStack(spacing: 6) {
                         Text(title)
                             .font(.system(size: 12, weight: isSelected ? .semibold : .medium))
-                            .foregroundStyle(isSelected ? CursorTheme.textPrimary : CursorTheme.textSecondary)
+                            .foregroundStyle(isSelected ? CursorTheme.textPrimary(for: colorScheme) : CursorTheme.textSecondary(for: colorScheme))
                             .lineLimit(1)
                             .truncationMode(.tail)
                         if let status = linkedTaskStatus {
@@ -120,7 +121,7 @@ struct TabChip: View {
                         }
                         Text(sub)
                             .font(.system(size: 10, weight: .regular))
-                            .foregroundStyle(subtitleColor ?? CursorTheme.textTertiary)
+                            .foregroundStyle(subtitleColor ?? CursorTheme.textTertiary(for: colorScheme))
                             .lineLimit(1)
                             .truncationMode(.middle)
                     }
@@ -132,7 +133,7 @@ struct TabChip: View {
                                 .font(.system(size: 10, weight: .regular))
                                 .italic()
                         }
-                        .foregroundStyle(CursorTheme.textTertiary)
+                        .foregroundStyle(CursorTheme.textTertiary(for: colorScheme))
                         .lineLimit(1)
                         .truncationMode(.middle)
                     }
@@ -143,7 +144,7 @@ struct TabChip: View {
                     HStack(spacing: 6) {
                         Text(title)
                             .font(.system(size: 12, weight: isSelected ? .semibold : .medium))
-                            .foregroundStyle(isSelected ? CursorTheme.textPrimary : CursorTheme.textSecondary)
+                            .foregroundStyle(isSelected ? CursorTheme.textPrimary(for: colorScheme) : CursorTheme.textSecondary(for: colorScheme))
                             .lineLimit(1)
                             .truncationMode(.tail)
                         if let status = linkedTaskStatus {
@@ -157,7 +158,7 @@ struct TabChip: View {
                             .font(.system(size: 10, weight: .regular))
                             .italic()
                     }
-                    .foregroundStyle(CursorTheme.textTertiary)
+                    .foregroundStyle(CursorTheme.textTertiary(for: colorScheme))
                     .lineLimit(1)
                     .truncationMode(.middle)
                 }
@@ -166,7 +167,7 @@ struct TabChip: View {
                 HStack(spacing: 6) {
                     Text(title)
                         .font(.system(size: 12, weight: isSelected ? .semibold : .medium))
-                        .foregroundStyle(isSelected ? CursorTheme.textPrimary : CursorTheme.textSecondary)
+                        .foregroundStyle(isSelected ? CursorTheme.textPrimary(for: colorScheme) : CursorTheme.textSecondary(for: colorScheme))
                         .lineLimit(1)
                         .truncationMode(.tail)
                     if let status = linkedTaskStatus {
@@ -180,7 +181,7 @@ struct TabChip: View {
                 Button(action: onClose) {
                     Image(systemName: "xmark")
                         .font(.system(size: 8, weight: .bold))
-                        .foregroundStyle(CursorTheme.textTertiary)
+                        .foregroundStyle(CursorTheme.textTertiary(for: colorScheme))
                         .frame(width: 16, height: 16)
                         .contentShape(Rectangle())
                 }
@@ -191,13 +192,13 @@ struct TabChip: View {
         .padding(.vertical, 7)
         .background(
             isSelected
-                ? CursorTheme.surfaceRaised
-                : CursorTheme.surfaceMuted,
+                ? CursorTheme.surfaceRaised(for: colorScheme)
+                : CursorTheme.surfaceMuted(for: colorScheme),
             in: RoundedRectangle(cornerRadius: 10, style: .continuous)
         )
         .overlay(
             RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .stroke(isSelected ? CursorTheme.borderStrong : CursorTheme.border.opacity(0.6), lineWidth: 1)
+                .stroke(isSelected ? CursorTheme.borderStrong(for: colorScheme) : CursorTheme.border(for: colorScheme).opacity(0.6), lineWidth: 1)
         )
     }
 
@@ -223,13 +224,13 @@ struct TabChip: View {
     private func statusDisplay(_ status: LinkedTaskStatus) -> (icon: String, color: Color, label: String) {
         switch status {
         case .open:
-            return ("circle", CursorTheme.textTertiary, "open")
+            return ("circle", CursorTheme.textTertiary(for: colorScheme), "open")
         case .processing:
             return ("arrow.trianglehead.2.clockwise.rotate.90", CursorTheme.brandBlue, "processing")
         case .done:
-            return ("checkmark.circle.fill", Color.green, "done")
+            return ("checkmark.circle.fill", CursorTheme.semanticSuccess, "done")
         case .stopped:
-            return ("stop.fill", Color.red, "stopped")
+            return ("stop.fill", CursorTheme.semanticError, "stopped")
         }
     }
 }

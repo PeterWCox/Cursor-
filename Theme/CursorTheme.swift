@@ -3,6 +3,7 @@ import SwiftUI
 // MARK: - Design system and app constants
 
 enum CursorTheme {
+    // Dark palette (default)
     static let chrome = Color(red: 0.055, green: 0.059, blue: 0.075)
     static let panel = Color(red: 0.082, green: 0.086, blue: 0.106)
     static let surface = Color(red: 0.118, green: 0.122, blue: 0.145)
@@ -14,6 +15,33 @@ enum CursorTheme {
     static let textPrimary = Color.white.opacity(0.92)
     static let textSecondary = Color.white.opacity(0.62)
     static let textTertiary = Color.white.opacity(0.42)
+
+    // Light palette
+    private static let chromeLight = Color(red: 0.96, green: 0.96, blue: 0.97)
+    private static let panelLight = Color(red: 0.94, green: 0.94, blue: 0.96)
+    private static let surfaceLight = Color(red: 1.0, green: 1.0, blue: 1.0)
+    private static let surfaceRaisedLight = Color(red: 0.98, green: 0.98, blue: 0.99)
+    private static let surfaceMutedLight = Color(red: 0.96, green: 0.96, blue: 0.98)
+    private static let editorLight = Color(red: 0.98, green: 0.98, blue: 0.99)
+    private static let borderLight = Color.black.opacity(0.10)
+    private static let borderStrongLight = Color.black.opacity(0.18)
+    private static let textPrimaryLight = Color.black.opacity(0.88)
+    private static let textSecondaryLight = Color.black.opacity(0.58)
+    private static let textTertiaryLight = Color.black.opacity(0.42)
+
+    /// Returns the semantic color for the given color scheme. Use in views with `@Environment(\.colorScheme)`.
+    static func chrome(for colorScheme: ColorScheme) -> Color { colorScheme == .dark ? chrome : chromeLight }
+    static func panel(for colorScheme: ColorScheme) -> Color { colorScheme == .dark ? panel : panelLight }
+    static func surface(for colorScheme: ColorScheme) -> Color { colorScheme == .dark ? surface : surfaceLight }
+    static func surfaceRaised(for colorScheme: ColorScheme) -> Color { colorScheme == .dark ? surfaceRaised : surfaceRaisedLight }
+    static func surfaceMuted(for colorScheme: ColorScheme) -> Color { colorScheme == .dark ? surfaceMuted : surfaceMutedLight }
+    static func editor(for colorScheme: ColorScheme) -> Color { colorScheme == .dark ? editor : editorLight }
+    static func border(for colorScheme: ColorScheme) -> Color { colorScheme == .dark ? border : borderLight }
+    static func borderStrong(for colorScheme: ColorScheme) -> Color { colorScheme == .dark ? borderStrong : borderStrongLight }
+    static func textPrimary(for colorScheme: ColorScheme) -> Color { colorScheme == .dark ? textPrimary : textPrimaryLight }
+    static func textSecondary(for colorScheme: ColorScheme) -> Color { colorScheme == .dark ? textSecondary : textSecondaryLight }
+    static func textTertiary(for colorScheme: ColorScheme) -> Color { colorScheme == .dark ? textTertiary : textTertiaryLight }
+
     static let brandBlue = Color(red: 0.40, green: 0.61, blue: 1.00)
     static let brandPurple = Color(red: 0.55, green: 0.40, blue: 0.98)
     static let brandAmber = Color(red: 0.98, green: 0.76, blue: 0.31)
@@ -24,10 +52,21 @@ enum CursorTheme {
     static let cursorPlusTeal = Color(red: 0.0, green: 0.83, blue: 0.71)
     /// Metro subtitle: bright blue (script-style branding).
     static let metroBlue = Color(red: 0.20, green: 0.45, blue: 0.95)
-    /// Metro accent: red underline.
+    /// Metro accent: red underline. Also use for semantic error / destructive.
     static let metroRed = Color(red: 0.90, green: 0.22, blue: 0.20)
     /// Tesco blue for Metro speech bubble (brand-style).
     static let tescoBlue = Color(red: 0, green: 83/255, blue: 159/255)
+
+    // MARK: - Semantic and shared UI colors (use instead of hardcoded Color.red / .green / etc.)
+
+    /// Error, destructive, or stopped state. Prefer over Color.red.
+    static let semanticError = metroRed
+    /// Success or “done” state. Prefer over Color.green for status.
+    static let semanticSuccess = Color(red: 0.2, green: 0.78, blue: 0.35)
+    /// Spinner and loading accent (e.g. agent running). Use for progress/activity.
+    static let spinnerBlue = Color(red: 0.45, green: 0.68, blue: 1.0)
+    /// Soft error background (e.g. error card tint).
+    static let semanticErrorTint = Color(red: 1.0, green: 0.64, blue: 0.67)
 
     static var brandGradient: LinearGradient {
         LinearGradient(
@@ -40,6 +79,15 @@ enum CursorTheme {
     static var panelGradient: LinearGradient {
         LinearGradient(
             colors: [panel, chrome],
+            startPoint: .top,
+            endPoint: .bottom
+        )
+    }
+
+    /// Panel background gradient for the given color scheme.
+    static func panelGradient(for colorScheme: ColorScheme) -> LinearGradient {
+        LinearGradient(
+            colors: [panel(for: colorScheme), chrome(for: colorScheme)],
             startPoint: .top,
             endPoint: .bottom
         )
@@ -84,6 +132,27 @@ struct ModelOption: Identifiable {
 enum AvailableModels {
     static let autoID = "auto"
 
+    /// Model IDs enabled (shown in picker) out of the box when user has never changed preferences.
+    static let defaultEnabledModelIds: Set<String> = [
+        "composer-1.5",
+        "gpt-5.3-codex",
+        "gpt-5.4-medium",
+        "sonnet-4.6",
+        "opus-4.6",
+    ]
+
+    /// Model IDs to show in the Models settings list by default; "View All Models" shows the full list.
+    static let defaultShownModelIds: Set<String> = [
+        "composer-1.5",
+        "composer-1",
+        "gpt-5.3-codex",
+        "gpt-5.3-codex-low",
+        "gpt-5.3-codex-low-fast",
+        "gpt-5.4-medium",
+        "sonnet-4.6",
+        "opus-4.6",
+    ]
+
     /// Fallback when CLI is unavailable or fails; also used as initial value before load.
     static let fallback: [ModelOption] = [
         ModelOption(id: autoID, label: "Auto", isPremium: false),
@@ -100,6 +169,11 @@ enum AvailableModels {
         guard !disabledIds.isEmpty else { return list }
         let filtered = list.filter { !disabledIds.contains($0.id) }
         return filtered.isEmpty ? list : filtered
+    }
+
+    /// Whether a model is in the default "shown" set (for Models settings initial list).
+    static func isDefaultShown(modelId: String) -> Bool {
+        defaultShownModelIds.contains(modelId)
     }
 }
 

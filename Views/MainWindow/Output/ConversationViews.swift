@@ -42,8 +42,8 @@ private func toolCallTint(for status: ToolCallSegmentStatus) -> Color {
     switch status {
     case .running: return CursorTheme.brandBlue
     case .completed: return CursorTheme.textSecondary
-    case .failed: return Color(red: 1.0, green: 0.64, blue: 0.67)
-    case .stopped: return Color.red
+    case .failed: return CursorTheme.semanticErrorTint
+    case .stopped: return CursorTheme.semanticError
     }
 }
 
@@ -118,7 +118,6 @@ private struct ThinkingBlockView: View {
                             .font(.system(size: 12))
                             .foregroundStyle(CursorTheme.textSecondary)
                             .textual.textSelection(.enabled)
-                            .colorScheme(.dark)
                     }
                 }
             }
@@ -162,7 +161,6 @@ struct ConversationSegmentView: View, Equatable {
                         .textual.structuredTextStyle(.gitHub)
                         .foregroundStyle(CursorTheme.textPrimary)
                         .textual.textSelection(.enabled)
-                        .colorScheme(.dark)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
             }
@@ -192,7 +190,6 @@ struct ConversationSegmentView: View, Equatable {
                             .textual.inlineStyle(.gitHub)
                             .fixedSize(horizontal: false, vertical: true)
                             .textual.textSelection(.enabled)
-                            .colorScheme(.dark)
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -380,7 +377,7 @@ struct StoppedPlaceholderView: View {
         HStack(spacing: 8) {
             Image(systemName: "square.fill")
                 .font(.system(size: 11, weight: .bold))
-                .foregroundStyle(Color.red)
+                .foregroundStyle(CursorTheme.semanticError)
             Text("Stopped")
                 .font(.system(size: 13, weight: .medium))
                 .foregroundStyle(CursorTheme.textSecondary)

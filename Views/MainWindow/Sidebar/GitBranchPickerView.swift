@@ -48,7 +48,7 @@ struct NewBranchSheet: View {
             if let errorMessage {
                 Text(errorMessage)
                     .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(Color.red)
+                    .foregroundStyle(CursorTheme.semanticError)
                     .padding(.bottom, 8)
             }
         }
@@ -114,7 +114,6 @@ struct GitBranchPickerView: View {
         }
         .menuStyle(.borderlessButton)
         .foregroundColor(.white)
-        .colorScheme(.dark)
         .disabled(branches.isEmpty)
         .sheet(isPresented: $showNewBranchSheet) {
             NewBranchSheet(currentBranch: currentBranch) { name in

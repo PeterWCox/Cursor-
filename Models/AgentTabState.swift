@@ -18,8 +18,10 @@ struct SavedAgentTab: Codable {
     var followUpQueue: [QueuedFollowUp]
     /// When set, this agent is linked to a project task; used to show task status (open / processing / done) in the sidebar.
     var linkedTaskID: UUID?
+    /// Cursor backend conversation ID; when set, used with --resume to continue the same conversation after restart.
+    var cursorChatId: String?
 
-    init(id: UUID, title: String, workspacePath: String, currentBranch: String, prompt: String, turns: [ConversationTurn], hasAttachedScreenshot: Bool, followUpQueue: [QueuedFollowUp], linkedTaskID: UUID? = nil) {
+    init(id: UUID, title: String, workspacePath: String, currentBranch: String, prompt: String, turns: [ConversationTurn], hasAttachedScreenshot: Bool, followUpQueue: [QueuedFollowUp], linkedTaskID: UUID? = nil, cursorChatId: String? = nil) {
         self.id = id
         self.title = title
         self.workspacePath = workspacePath
@@ -29,6 +31,7 @@ struct SavedAgentTab: Codable {
         self.hasAttachedScreenshot = hasAttachedScreenshot
         self.followUpQueue = followUpQueue
         self.linkedTaskID = linkedTaskID
+        self.cursorChatId = cursorChatId
     }
 
     init(from decoder: Decoder) throws {
@@ -42,10 +45,11 @@ struct SavedAgentTab: Codable {
         hasAttachedScreenshot = try c.decode(Bool.self, forKey: .hasAttachedScreenshot)
         followUpQueue = try c.decode([QueuedFollowUp].self, forKey: .followUpQueue)
         linkedTaskID = try c.decodeIfPresent(UUID.self, forKey: .linkedTaskID)
+        cursorChatId = try c.decodeIfPresent(String.self, forKey: .cursorChatId)
     }
 
     private enum CodingKeys: String, CodingKey {
-        case id, title, workspacePath, currentBranch, prompt, turns, hasAttachedScreenshot, followUpQueue, linkedTaskID
+        case id, title, workspacePath, currentBranch, prompt, turns, hasAttachedScreenshot, followUpQueue, linkedTaskID, cursorChatId
     }
 }
 
@@ -196,6 +200,7 @@ class AgentTab: ObservableObject, Identifiable {
         self.hasAttachedScreenshot = saved.hasAttachedScreenshot
         self.followUpQueue = saved.followUpQueue
         self.linkedTaskID = saved.linkedTaskID
+        self.cursorChatId = saved.cursorChatId
         self.cachedConversationCharacterCount = Self.conversationCharacterCount(for: saved.turns)
     }
 
@@ -209,7 +214,8 @@ class AgentTab: ObservableObject, Identifiable {
             turns: turns,
             hasAttachedScreenshot: hasAttachedScreenshot,
             followUpQueue: followUpQueue,
-            linkedTaskID: linkedTaskID
+            linkedTaskID: linkedTaskID,
+            cursorChatId: cursorChatId
         )
     }
 

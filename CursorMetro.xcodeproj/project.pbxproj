@@ -43,7 +43,9 @@
 		A1000031 /* AppDialogSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000031 /* AppDialogSheet.swift */; };
 		A1000032 /* TooltipModifier.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000032 /* TooltipModifier.swift */; };
 		A1000033 /* MetroSpeechBubble.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000033 /* MetroSpeechBubble.swift */; };
-		A1000034 /* ActionButton.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000034 /* ActionButton.swift */; };
+		A1000040 /* ActionButton.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000040 /* ActionButton.swift */; };
+		A1000041 /* ThreeDotMenuButton.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000041 /* ThreeDotMenuButton.swift */; };
+		A1000042 /* IconButton.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000042 /* IconButton.swift */; };
 		A1000024 /* Textual in Frameworks */ = {isa = PBXBuildFile; productRef = A8000003 /* Textual */; };
 		A1000036 /* SwiftTerm in Frameworks */ = {isa = PBXBuildFile; productRef = A8000005 /* SwiftTerm */; };
 /* End PBXBuildFile section */
@@ -86,7 +88,9 @@
 		A2000031 /* AppDialogSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDialogSheet.swift; sourceTree = "<group>"; };
 		A2000032 /* TooltipModifier.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TooltipModifier.swift; sourceTree = "<group>"; };
 		A2000033 /* MetroSpeechBubble.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MetroSpeechBubble.swift; sourceTree = "<group>"; };
-		A2000034 /* ActionButton.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActionButton.swift; sourceTree = "<group>"; };
+		A2000040 /* ActionButton.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActionButton.swift; sourceTree = "<group>"; };
+		A2000041 /* ThreeDotMenuButton.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThreeDotMenuButton.swift; sourceTree = "<group>"; };
+		A2000042 /* IconButton.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IconButton.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -114,6 +118,7 @@
 			isa = PBXGroup;
 			children = (
 				A5000010 /* App */,
+				A5000024 /* UI */,
 				A5000022 /* Views */,
 				A5000018 /* Models */,
 				A5000019 /* Services */,
@@ -122,6 +127,16 @@
 				A2000005 /* Assets.xcassets */,
 			);
 			path = ".";
+			sourceTree = "<group>";
+		};
+		A5000024 /* UI */ = {
+			isa = PBXGroup;
+			children = (
+				A2000040 /* ActionButton.swift */,
+				A2000041 /* ThreeDotMenuButton.swift */,
+				A2000042 /* IconButton.swift */,
+			);
+			path = UI;
 			sourceTree = "<group>";
 		};
 		A5000022 /* Views */ = {
@@ -137,7 +152,6 @@
 		A5000023 /* Components */ = {
 			isa = PBXGroup;
 			children = (
-				A2000034 /* ActionButton.swift */,
 				A2000031 /* AppDialogSheet.swift */,
 				A2000033 /* MetroSpeechBubble.swift */,
 			);
@@ -401,7 +415,9 @@
 				A1000031 /* AppDialogSheet.swift in Sources */,
 				A1000032 /* TooltipModifier.swift in Sources */,
 				A1000033 /* MetroSpeechBubble.swift in Sources */,
-				A1000034 /* ActionButton.swift in Sources */,
+				A1000040 /* ActionButton.swift in Sources */,
+				A1000041 /* ThreeDotMenuButton.swift in Sources */,
+				A1000042 /* IconButton.swift in Sources */,
 				A1000037 /* EmbeddedTerminalView.swift in Sources */,
 				A1000038 /* TasksListView.swift in Sources */,
 				A1000039 /* ProjectTasksStorage.swift in Sources */,

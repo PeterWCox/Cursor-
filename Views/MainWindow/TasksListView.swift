@@ -8,23 +8,20 @@ struct TasksListView: View {
     let workspacePath: String
     /// When set to true from outside (e.g. Cmd+T), show the add-new-task row and focus it.
     var triggerAddNewTask: Binding<Bool> = .constant(false)
-    /// Send task content to a new agent; when taskID is non-nil, the new agent is linked to that task.
-    var onSendToAgent: (String, UUID?) -> Void
+    /// When set, returns the linked agent status for a task (open / processing / done / stopped) to show a badge on the task row.
+    var linkedStatusForTaskID: ((UUID) -> LinkedTaskStatus?)? = nil
+    /// Send task content to a new agent; when taskID is non-nil, the new agent is linked to that task. When screenshotPaths is non-empty, those paths (under .cursormetro) are attached to the prompt.
+    var onSendToAgent: (String, UUID?, [String]) -> Void
     var onDismiss: () -> Void
-    /// Agents for this workspace (for "Link to Agent" menu).
-    var agentsForWorkspace: [AgentTab] = []
-    var isTaskLinked: (UUID) -> Bool = { _ in false }
-    /// Status of the linked agent for each task (open / processing / done); shown on the task row.
-    var linkedTaskStatusForTaskID: (UUID) -> LinkedTaskStatus? = { _ in nil }
-    var onLinkTaskToAgent: (ProjectTask, AgentTab) -> Void = { _, _ in }
-    var onUnlinkTask: (UUID) -> Void = { _ in }
 
     @State private var tasks: [ProjectTask] = []
     @State private var editingTask: ProjectTask?
     @State private var editingDraft: String = ""
+    @State private var editingScreenshotImages: [NSImage] = []
+    @State private var showEditScreenshotFileImporter: Bool = false
     @State private var isAddingNewTask: Bool = false
     @State private var newTaskDraft: String = ""
-    @State private var newTaskScreenshot: NSImage? = nil
+    @State private var newTaskScreenshots: [NSImage] = []
     @State private var showScreenshotFileImporter: Bool = false
     @FocusState private var isNewTaskFieldFocused: Bool
     @FocusState private var isTaskEditorFocused: Bool
@@ -35,6 +32,8 @@ struct TasksListView: View {
     @State private var archivedSectionCollapsed: Bool = false
     /// When adding a new task, Cmd+V pastes screenshot from clipboard. Monitor is installed only while the new-task row is visible.
     @State private var newTaskPasteKeyMonitor: Any?
+    /// When editing a task, Cmd+V pastes screenshot from clipboard.
+    @State private var editTaskPasteKeyMonitor: Any?
     /// URL for full-screen task screenshot preview (same pattern as PopoutView screenshot preview).
     @State private var taskScreenshotPreviewURL: URL? = nil
 
@@ -44,21 +43,8 @@ struct TasksListView: View {
         tasks = ProjectTasksStorage.tasks(workspacePath: workspacePath)
     }
 
-    /// Sort order for todo list: no status first, then done, then processing, then open (stopped after done).
-    private func linkedStatusSortOrder(_ status: LinkedTaskStatus?) -> Int {
-        switch status {
-        case nil: return 0
-        case .done: return 1
-        case .stopped: return 2
-        case .processing: return 3
-        case .open: return 4
-        }
-    }
-
     private var todoTasks: [ProjectTask] {
-        tasks
-            .filter { !$0.completed }
-            .sorted { linkedStatusSortOrder(linkedTaskStatusForTaskID($0.id)) < linkedStatusSortOrder(linkedTaskStatusForTaskID($1.id)) }
+        tasks.filter { !$0.completed }
     }
 
     private var archivedTasks: [ProjectTask] {
@@ -76,10 +62,10 @@ struct TasksListView: View {
     private func commitNewTask() {
         let trimmed = newTaskDraft.trimmingCharacters(in: .whitespacesAndNewlines)
         if !trimmed.isEmpty {
-            _ = ProjectTasksStorage.addTask(workspacePath: workspacePath, content: trimmed, screenshotImage: newTaskScreenshot)
+            _ = ProjectTasksStorage.addTask(workspacePath: workspacePath, content: trimmed, screenshotImages: newTaskScreenshots)
             reloadTasks()
             newTaskDraft = ""
-            newTaskScreenshot = nil
+            newTaskScreenshots = []
         }
         isAddingNewTask = false
         isNewTaskFieldFocused = false
@@ -87,7 +73,7 @@ struct TasksListView: View {
 
     private func cancelNewTask() {
         newTaskDraft = ""
-        newTaskScreenshot = nil
+        newTaskScreenshots = []
         isAddingNewTask = false
         isNewTaskFieldFocused = false
     }
@@ -151,10 +137,9 @@ struct TasksListView: View {
                 newTaskPasteKeyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
                     let modifiers = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
                     let isCommandV = modifiers.contains(.command) && event.charactersIgnoringModifiers?.lowercased() == "v"
-                    if isCommandV, SubmittableTextEditor.imageFromPasteboard(NSPasteboard.general) != nil {
-                        if let img = SubmittableTextEditor.imageFromPasteboard(NSPasteboard.general) {
-                            newTaskScreenshot = img
-                        }
+                    if isCommandV, newTaskScreenshots.count < AppLimits.maxScreenshots,
+                       let img = SubmittableTextEditor.imageFromPasteboard(NSPasteboard.general) {
+                        newTaskScreenshots.append(img)
                         return nil
                     }
                     return event
@@ -167,7 +152,28 @@ struct TasksListView: View {
             }
         }
         .onChange(of: editingTask) { _, new in
-            if new != nil { isTaskEditorFocused = true }
+            if let task = new {
+                isTaskEditorFocused = true
+                editingScreenshotImages = task.screenshotPaths.compactMap { path in
+                    NSImage(contentsOf: ProjectTasksStorage.taskScreenshotFileURL(workspacePath: workspacePath, screenshotPath: path))
+                }
+                editTaskPasteKeyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+                    let modifiers = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+                    let isCommandV = modifiers.contains(.command) && event.charactersIgnoringModifiers?.lowercased() == "v"
+                    if isCommandV, editingScreenshotImages.count < AppLimits.maxScreenshots,
+                       let img = SubmittableTextEditor.imageFromPasteboard(NSPasteboard.general) {
+                        editingScreenshotImages = editingScreenshotImages + [img]
+                        return nil
+                    }
+                    return event
+                }
+            } else {
+                editingScreenshotImages = []
+                if let monitor = editTaskPasteKeyMonitor {
+                    NSEvent.removeMonitor(monitor)
+                    editTaskPasteKeyMonitor = nil
+                }
+            }
         }
         .overlay {
             if let url = taskScreenshotPreviewURL {
@@ -175,6 +181,21 @@ struct TasksListView: View {
                     get: { true },
                     set: { if !$0 { taskScreenshotPreviewURL = nil } }
                 ))
+            }
+        }
+        .fileImporter(
+            isPresented: $showEditScreenshotFileImporter,
+            allowedContentTypes: [.image, .png, .jpeg],
+            allowsMultipleSelection: true
+        ) { result in
+            guard case .success(let urls) = result else { return }
+            let toAdd = urls.prefix(AppLimits.maxScreenshots - editingScreenshotImages.count)
+            for url in toAdd {
+                guard url.startAccessingSecurityScopedResource() else { continue }
+                defer { url.stopAccessingSecurityScopedResource() }
+                if let image = NSImage(contentsOf: url) {
+                    editingScreenshotImages.append(image)
+                }
             }
         }
     }
@@ -219,6 +240,7 @@ struct TasksListView: View {
         let trimmed = editingDraft.trimmingCharacters(in: .whitespacesAndNewlines)
         if !trimmed.isEmpty, let id = editingTask?.id {
             ProjectTasksStorage.updateTask(workspacePath: workspacePath, id: id, content: trimmed)
+            ProjectTasksStorage.updateTaskScreenshots(workspacePath: workspacePath, id: id, images: editingScreenshotImages)
             reloadTasks()
         }
         editingTask = nil
@@ -229,15 +251,20 @@ struct TasksListView: View {
         TaskRowView(
             task: task,
             workspacePath: workspacePath,
-            isLinked: isTaskLinked(task.id),
-            linkedTaskStatus: linkedTaskStatusForTaskID(task.id),
-            agentsForWorkspace: agentsForWorkspace,
+            linkedTaskStatus: linkedStatusForTaskID?(task.id),
             isEditing: editingTask?.id == task.id,
             editDraft: $editingDraft,
+            editScreenshotImages: $editingScreenshotImages,
+            showEditScreenshotFileImporter: $showEditScreenshotFileImporter,
             isEditorFocused: $isTaskEditorFocused,
             onTap: {
-                editingDraft = task.content
-                editingTask = task
+                let content = task.content
+                let taskToEdit = task
+                // Defer so when triggered from context/menu the menu dismisses first and inline editor gets focus
+                DispatchQueue.main.async {
+                    editingDraft = content
+                    editingTask = taskToEdit
+                }
             },
             onCommitEdit: commitEdit,
             onCancelEdit: { editingTask = nil },
@@ -245,18 +272,16 @@ struct TasksListView: View {
                 ProjectTasksStorage.updateTask(workspacePath: workspacePath, id: task.id, completed: !task.completed)
                 reloadTasks()
             },
-            onSendToAgent: { onSendToAgent(task.content, task.id) },
-            onLinkToAgent: { agent in onLinkTaskToAgent(task, agent) },
-            onUnlink: { onUnlinkTask(task.id) },
+            onSendToAgent: { onSendToAgent(task.content, task.id, task.screenshotPaths) },
             onDelete: {
                 ProjectTasksStorage.deleteTask(workspacePath: workspacePath, id: task.id)
                 reloadTasks()
             },
-            onPreviewScreenshot: task.screenshotPath != nil ? {
-                taskScreenshotPreviewURL = ProjectTasksStorage.taskScreenshotFileURL(workspacePath: workspacePath, screenshotPath: task.screenshotPath!)
-            } : nil,
-            onDeleteScreenshot: (task.screenshotPath != nil && !task.completed) ? {
-                ProjectTasksStorage.updateTaskScreenshot(workspacePath: workspacePath, id: task.id, image: nil)
+            onPreviewScreenshot: { path in
+                taskScreenshotPreviewURL = ProjectTasksStorage.taskScreenshotFileURL(workspacePath: workspacePath, screenshotPath: path)
+            },
+            onDeleteScreenshot: !task.completed ? { path in
+                ProjectTasksStorage.removeTaskScreenshot(workspacePath: workspacePath, id: task.id, screenshotPath: path)
                 reloadTasks()
             } : nil
         )
@@ -357,7 +382,7 @@ struct TasksListView: View {
             }
 
             TaskScreenshotDraftView(
-                image: $newTaskScreenshot,
+                images: $newTaskScreenshots,
                 showFileImporter: $showScreenshotFileImporter,
                 thumbnailSize: CGSize(width: 72, height: 72)
             )
@@ -371,68 +396,20 @@ struct TasksListView: View {
         .fileImporter(
             isPresented: $showScreenshotFileImporter,
             allowedContentTypes: [.image, .png, .jpeg],
-            allowsMultipleSelection: false
+            allowsMultipleSelection: true
         ) { result in
-            guard case .success(let urls) = result, let url = urls.first,
-                  url.startAccessingSecurityScopedResource() else { return }
-            defer { url.stopAccessingSecurityScopedResource() }
-            if let image = NSImage(contentsOf: url) {
-                newTaskScreenshot = image
+            guard case .success(let urls) = result else { return }
+            let toAdd = urls.prefix(AppLimits.maxScreenshots - newTaskScreenshots.count)
+            for url in toAdd {
+                guard url.startAccessingSecurityScopedResource() else { continue }
+                defer { url.stopAccessingSecurityScopedResource() }
+                if let image = NSImage(contentsOf: url) {
+                    newTaskScreenshots.append(image)
+                }
             }
         }
     }
 
-    @ViewBuilder
-    private func editTaskSheet(task: ProjectTask) -> some View {
-        EditTaskSheet(
-            workspacePath: workspacePath,
-            taskId: task.id,
-            initialContent: task.content,
-            initialScreenshotPath: task.screenshotPath,
-            onSave: { newContent in
-                let trimmed = newContent.trimmingCharacters(in: .whitespacesAndNewlines)
-                if !trimmed.isEmpty {
-                    ProjectTasksStorage.updateTask(workspacePath: workspacePath, id: task.id, content: trimmed)
-                    reloadTasks()
-                }
-                editingTask = nil
-            },
-            onCancel: { editingTask = nil }
-        )
-    }
-}
-
-// MARK: - Task status badge (open / processing / done / stopped)
-
-private struct TaskStatusBadge: View {
-    let status: LinkedTaskStatus
-
-    private var display: (icon: String, color: Color, label: String) {
-        switch status {
-        case .open:
-            return ("circle", CursorTheme.textTertiary, "open")
-        case .processing:
-            return ("arrow.trianglehead.2.clockwise.rotate.90", CursorTheme.brandBlue, "processing")
-        case .done:
-            return ("checkmark.circle.fill", Color.green, "done")
-        case .stopped:
-            return ("stop.fill", Color.red, "stopped")
-        }
-    }
-
-    var body: some View {
-        let (icon, color, label) = display
-        HStack(spacing: 4) {
-            Image(systemName: icon)
-                .font(.system(size: 9, weight: .semibold))
-            Text(label)
-                .font(.system(size: 10, weight: .medium))
-        }
-        .foregroundStyle(color)
-        .padding(.horizontal, 6)
-        .padding(.vertical, 3)
-        .background(color.opacity(0.2), in: RoundedRectangle(cornerRadius: 4, style: .continuous))
-    }
 }
 
 // MARK: - Task screenshot thumbnail (in todo row): tappable preview + delete
@@ -494,22 +471,21 @@ private struct TaskScreenshotThumbnailView: View {
 private struct TaskRowView: View {
     let task: ProjectTask
     let workspacePath: String
-    let isLinked: Bool
+    /// When set, show a badge for the linked agent status (processing / done / open / stopped).
     var linkedTaskStatus: LinkedTaskStatus? = nil
-    let agentsForWorkspace: [AgentTab]
     var isEditing: Bool = false
     @Binding var editDraft: String
+    @Binding var editScreenshotImages: [NSImage]
+    @Binding var showEditScreenshotFileImporter: Bool
     var isEditorFocused: FocusState<Bool>.Binding
     let onTap: () -> Void
     let onCommitEdit: () -> Void
     let onCancelEdit: () -> Void
     let onToggleComplete: () -> Void
     let onSendToAgent: () -> Void
-    let onLinkToAgent: (AgentTab) -> Void
-    let onUnlink: () -> Void
     let onDelete: () -> Void
-    var onPreviewScreenshot: (() -> Void)? = nil
-    var onDeleteScreenshot: (() -> Void)? = nil
+    var onPreviewScreenshot: ((String) -> Void)? = nil
+    var onDeleteScreenshot: ((String) -> Void)? = nil
 
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
@@ -527,7 +503,9 @@ private struct TaskRowView: View {
                         .font(.system(size: 14, weight: .regular))
                         .foregroundStyle(CursorTheme.textPrimary)
                         .scrollContentBackground(.hidden)
-                        .frame(minHeight: 24, maxHeight: 120)
+                        .lineSpacing(6)
+                        .padding(.vertical, 4)
+                        .frame(minHeight: 36, maxHeight: 160)
                         .focused(isEditorFocused)
                         .onKeyPress { press in
                             if press.key == .return {
@@ -543,27 +521,38 @@ private struct TaskRowView: View {
                             onCancelEdit()
                             return .handled
                         }
-                } else {
-                    Text(task.content)
-                        .font(.system(size: 14, weight: .regular))
-                        .foregroundStyle(task.completed ? CursorTheme.textTertiary : CursorTheme.textPrimary)
-                        .strikethrough(task.completed)
-                        .multilineTextAlignment(.leading)
-                        .lineLimit(4)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .contentShape(Rectangle())
-                        .onTapGesture(count: 2) { if !task.completed { onTap() } }
-                }
-                if let path = task.screenshotPath {
-                    TaskScreenshotThumbnailView(
-                        workspacePath: workspacePath,
-                        screenshotPath: path,
-                        onTapPreview: onPreviewScreenshot,
-                        onDelete: onDeleteScreenshot
+                    TaskScreenshotDraftView(
+                        images: $editScreenshotImages,
+                        showFileImporter: $showEditScreenshotFileImporter,
+                        thumbnailSize: CGSize(width: 72, height: 72)
                     )
+                } else {
+                    HStack(alignment: .top, spacing: 8) {
+                        Text(task.content)
+                            .font(.system(size: 14, weight: .regular))
+                            .foregroundStyle(task.completed ? CursorTheme.textTertiary : CursorTheme.textPrimary)
+                            .strikethrough(task.completed)
+                            .multilineTextAlignment(.leading)
+                            .lineLimit(4)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .contentShape(Rectangle())
+                            .onTapGesture(count: 2) { if !task.completed { onTap() } }
+                        if let status = linkedTaskStatus {
+                            taskStatusBadge(status)
+                        }
+                    }
                 }
-                if let status = linkedTaskStatus {
-                    TaskStatusBadge(status: status)
+                if !task.screenshotPaths.isEmpty {
+                    HStack(alignment: .center, spacing: 6) {
+                        ForEach(task.screenshotPaths, id: \.self) { path in
+                            TaskScreenshotThumbnailView(
+                                workspacePath: workspacePath,
+                                screenshotPath: path,
+                                onTapPreview: { onPreviewScreenshot?(path) },
+                                onDelete: { onDeleteScreenshot?(path) }
+                            )
+                        }
+                    }
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -577,19 +566,8 @@ private struct TaskRowView: View {
                     Button("Send to new Agent", systemImage: "bubble.left.and.bubble.right") {
                         onSendToAgent()
                     }
-                    if !agentsForWorkspace.isEmpty {
-                        Menu("Link to Agent", systemImage: "link") {
-                            ForEach(agentsForWorkspace) { agent in
-                                Button(agent.title) {
-                                    onLinkToAgent(agent)
-                                }
-                            }
-                        }
-                    }
-                    if isLinked {
-                        Button("Unlink from Agent", systemImage: "link.slash") {
-                            onUnlink()
-                        }
+                    Button("Edit task…", systemImage: "pencil") {
+                        onTap()
                     }
                 }
                 Divider()
@@ -610,19 +588,69 @@ private struct TaskRowView: View {
             RoundedRectangle(cornerRadius: 12, style: .continuous)
                 .stroke(CursorTheme.border, lineWidth: 1)
         )
+        .contextMenu {
+            Button(task.completed ? "Mark as not done" : "Mark as Done", systemImage: task.completed ? "circle" : "checkmark.circle") {
+                onToggleComplete()
+            }
+            if !task.completed {
+                Divider()
+                Button("Send to new Agent", systemImage: "bubble.left.and.bubble.right") {
+                    onSendToAgent()
+                }
+                Button("Edit task…", systemImage: "pencil") {
+                    onTap()
+                }
+            }
+            Divider()
+            Button("Delete", systemImage: "trash", role: .destructive) {
+                onDelete()
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func taskStatusBadge(_ status: LinkedTaskStatus) -> some View {
+        let (icon, color, label) = statusDisplay(status)
+        HStack(spacing: 2) {
+            if status == .processing {
+                LightBlueSpinner(size: 10)
+            } else {
+                Image(systemName: icon)
+                    .font(.system(size: 9, weight: .semibold))
+            }
+            Text(label)
+                .font(.system(size: 10, weight: .medium))
+        }
+        .foregroundStyle(color)
+        .padding(.horizontal, 5)
+        .padding(.vertical, 2)
+        .background(color.opacity(0.2), in: RoundedRectangle(cornerRadius: 4, style: .continuous))
+    }
+
+    private func statusDisplay(_ status: LinkedTaskStatus) -> (icon: String, color: Color, label: String) {
+        switch status {
+        case .open:
+            return ("circle", CursorTheme.textTertiary, "open")
+        case .processing:
+            return ("arrow.trianglehead.2.clockwise.rotate.90", CursorTheme.brandBlue, "processing")
+        case .done:
+            return ("checkmark.circle.fill", CursorTheme.semanticSuccess, "done")
+        case .stopped:
+            return ("stop.fill", CursorTheme.semanticError, "stopped")
+        }
     }
 }
 
-// MARK: - Screenshot draft (new task / edit): thumbnail or add controls
+// MARK: - Screenshot draft (new task / edit): thumbnails + add controls
 
 private struct TaskScreenshotDraftView: View {
-    @Binding var image: NSImage?
+    @Binding var images: [NSImage]
     @Binding var showFileImporter: Bool
     var thumbnailSize: CGSize
 
     var body: some View {
         HStack(alignment: .center, spacing: 10) {
-            if let img = image {
+            ForEach(Array(images.enumerated()), id: \.offset) { index, img in
                 Image(nsImage: img)
                     .resizable()
                     .aspectRatio(contentMode: .fill)
@@ -632,17 +660,18 @@ private struct TaskScreenshotDraftView: View {
                         RoundedRectangle(cornerRadius: 8, style: .continuous)
                             .stroke(CursorTheme.border, lineWidth: 1)
                     )
-                Button(action: { image = nil }) {
+                Button(action: { images.remove(at: index) }) {
                     Image(systemName: "xmark.circle.fill")
                         .font(.system(size: 18))
                         .foregroundStyle(CursorTheme.textTertiary)
                 }
                 .buttonStyle(.plain)
-            } else {
+            }
+            if images.count < AppLimits.maxScreenshots {
                 Menu {
                     Button("Paste from clipboard") {
                         if let pasted = SubmittableTextEditor.imageFromPasteboard(NSPasteboard.general) {
-                            image = pasted
+                            images.append(pasted)
                         }
                     }
                     Button("Choose file…") {
@@ -659,153 +688,3 @@ private struct TaskScreenshotDraftView: View {
     }
 }
 
-// MARK: - Edit task sheet (content + optional screenshot)
-
-private struct EditTaskSheet: View {
-    let workspacePath: String
-    let taskId: UUID
-    let initialContent: String
-    let initialScreenshotPath: String?
-    var onSave: (String) -> Void
-    var onCancel: () -> Void
-
-    @State private var draft: String = ""
-    @State private var draftScreenshotImage: NSImage? = nil
-    @State private var screenshotRemoved: Bool = false
-    @State private var showScreenshotFileImporter: Bool = false
-
-    private var effectiveScreenshot: NSImage? {
-        if screenshotRemoved { return nil }
-        if let img = draftScreenshotImage { return img }
-        guard let path = initialScreenshotPath else { return nil }
-        let url = ProjectTasksStorage.taskScreenshotFileURL(workspacePath: workspacePath, screenshotPath: path)
-        return NSImage(contentsOf: url)
-    }
-
-    var body: some View {
-        VStack(spacing: 0) {
-            HStack {
-                Text("Edit task")
-                    .font(.system(size: 18, weight: .semibold))
-                    .foregroundStyle(CursorTheme.textPrimary)
-                Spacer()
-                Button("Cancel") {
-                    onCancel()
-                }
-                .foregroundStyle(CursorTheme.textSecondary)
-                Button("Save") {
-                    saveTask()
-                }
-                .fontWeight(.semibold)
-                .foregroundStyle(CursorTheme.brandBlue)
-            }
-            .padding(16)
-            Divider().background(CursorTheme.border)
-            SubmittableTextEditor(
-                text: $draft,
-                isDisabled: false,
-                onSubmit: { },
-                onPasteImage: {
-                    if let img = SubmittableTextEditor.imageFromPasteboard(NSPasteboard.general) {
-                        draftScreenshotImage = img
-                        screenshotRemoved = false
-                    }
-                }
-            )
-            .padding(12)
-            .frame(minHeight: 140)
-            Divider().background(CursorTheme.border)
-            HStack(alignment: .center, spacing: 10) {
-                Text("Screenshot")
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundStyle(CursorTheme.textSecondary)
-                editSheetScreenshotSection
-            }
-            .padding(12)
-        }
-        .frame(width: 440, height: 380)
-        .background(CursorTheme.surface)
-        .onAppear {
-            draft = initialContent
-            if initialScreenshotPath != nil { screenshotRemoved = false }
-        }
-        .fileImporter(
-            isPresented: $showScreenshotFileImporter,
-            allowedContentTypes: [.image, .png, .jpeg],
-            allowsMultipleSelection: false
-        ) { result in
-            guard case .success(let urls) = result, let url = urls.first,
-                  url.startAccessingSecurityScopedResource() else { return }
-            defer { url.stopAccessingSecurityScopedResource() }
-            if let loaded = NSImage(contentsOf: url) {
-                draftScreenshotImage = loaded
-                screenshotRemoved = false
-            }
-        }
-    }
-
-    @ViewBuilder
-    private var editSheetScreenshotSection: some View {
-        if let img = effectiveScreenshot {
-            Image(nsImage: img)
-                .resizable()
-                .aspectRatio(contentMode: .fill)
-                .frame(width: 72, height: 72)
-                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .stroke(CursorTheme.border, lineWidth: 1)
-                )
-            Menu {
-                Button("Replace with clipboard") {
-                    if let pasted = SubmittableTextEditor.imageFromPasteboard(NSPasteboard.general) {
-                        draftScreenshotImage = pasted
-                        screenshotRemoved = false
-                    }
-                }
-                Button("Replace with file…") {
-                    showScreenshotFileImporter = true
-                }
-                Button("Remove screenshot", role: .destructive) {
-                    draftScreenshotImage = nil
-                    screenshotRemoved = true
-                }
-            } label: {
-                Image(systemName: "ellipsis.circle")
-                    .font(.system(size: 16))
-                    .foregroundStyle(CursorTheme.textSecondary)
-            }
-            .menuStyle(.borderlessButton)
-        } else {
-            Menu {
-                Button("Paste from clipboard") {
-                    if let pasted = SubmittableTextEditor.imageFromPasteboard(NSPasteboard.general) {
-                        draftScreenshotImage = pasted
-                        screenshotRemoved = false
-                    }
-                }
-                Button("Choose file…") {
-                    showScreenshotFileImporter = true
-                }
-            } label: {
-                Label("Add screenshot", systemImage: "photo.badge.plus")
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundStyle(CursorTheme.brandBlue)
-            }
-            .menuStyle(.borderlessButton)
-        }
-    }
-
-    private func saveTask() {
-        let trimmed = draft.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !trimmed.isEmpty {
-            ProjectTasksStorage.updateTask(workspacePath: workspacePath, id: taskId, content: trimmed)
-        }
-        if screenshotRemoved {
-            ProjectTasksStorage.updateTaskScreenshot(workspacePath: workspacePath, id: taskId, image: nil)
-        } else if let img = draftScreenshotImage {
-            ProjectTasksStorage.updateTaskScreenshot(workspacePath: workspacePath, id: taskId, image: img)
-        }
-        onSave(draft)
-    }
-}

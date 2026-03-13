@@ -134,7 +134,7 @@ struct CreateDebugScriptSheet: View {
             if let errorMessage {
                 Text(errorMessage)
                     .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(Color.red)
+                    .foregroundStyle(CursorTheme.semanticError)
                     .padding(.top, 12)
             }
         }

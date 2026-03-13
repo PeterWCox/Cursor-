@@ -58,8 +58,16 @@ struct SubmittableTextEditor: NSViewRepresentable {
     var onHeightChange: ((CGFloat) -> Void)? = nil
     /// Called once with (focusClosure, isFirstResponderClosure) so the host can focus this field (e.g. on Tab) and check if it already has focus.
     var onFocusRequested: (((@escaping () -> Void), (@escaping () -> Bool)) -> Void)? = nil
+    /// Pass from environment so editor text respects light/dark.
+    var colorScheme: ColorScheme = .dark
 
     func makeCoordinator() -> Coordinator { Coordinator(self) }
+
+    private static func textColor(for colorScheme: ColorScheme) -> NSColor {
+        colorScheme == .dark
+            ? NSColor.white.withAlphaComponent(0.92)
+            : NSColor.black.withAlphaComponent(0.88)
+    }
 
     func makeNSView(context: Context) -> NSScrollView {
         let scrollView = NSScrollView()
@@ -69,8 +77,8 @@ struct SubmittableTextEditor: NSViewRepresentable {
         textView.isRichText = false
         textView.font = NSFont.monospacedSystemFont(ofSize: NSFont.systemFontSize, weight: .regular)
         textView.backgroundColor = .clear
-        textView.textColor = NSColor.white.withAlphaComponent(0.92)
-        textView.insertionPointColor = .white
+        textView.textColor = Self.textColor(for: colorScheme)
+        textView.insertionPointColor = Self.textColor(for: colorScheme)
         textView.isEditable = true
         textView.isSelectable = true
         textView.allowsUndo = true
@@ -96,6 +104,8 @@ struct SubmittableTextEditor: NSViewRepresentable {
     func updateNSView(_ scrollView: NSScrollView, context: Context) {
         guard let textView = scrollView.documentView as? NSTextView else { return }
         context.coordinator.parent = self
+        textView.textColor = Self.textColor(for: colorScheme)
+        textView.insertionPointColor = Self.textColor(for: colorScheme)
         if textView.string != text {
             textView.string = text
         }

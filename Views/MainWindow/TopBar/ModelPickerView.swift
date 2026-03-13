@@ -78,7 +78,6 @@ struct ModelPickerView: View {
                 .fixedSize(horizontal: true, vertical: false)
             }
         }
-        .colorScheme(.dark)
     }
 
     /// Red "!" with white outline/border when a premium (non-Auto) model is selected.

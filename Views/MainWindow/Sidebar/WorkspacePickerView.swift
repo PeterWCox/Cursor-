@@ -44,7 +44,6 @@ struct WorkspacePickerView: View {
         .buttonStyle(RefreshOnOpenMenuButtonStyle(onPress: onOpenMenu))
         .menuStyle(.borderlessButton)
         .foregroundColor(.white)
-        .colorScheme(.dark)
     }
 
     private func pickerLabel(icon: String, title: String) -> some View {

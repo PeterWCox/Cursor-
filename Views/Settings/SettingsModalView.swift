@@ -23,6 +23,7 @@ private enum SettingsPane: String, CaseIterable, Identifiable {
 
 struct SettingsModalView: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.colorScheme) private var colorScheme
     @EnvironmentObject var appState: AppState
     @State private var selectedPane: SettingsPane = .general
 
@@ -32,56 +33,61 @@ struct SettingsModalView: View {
         VStack(spacing: 0) {
             header
             Divider()
-                .background(CursorTheme.border)
+                .background(CursorTheme.border(for: colorScheme))
 
             HStack(spacing: 0) {
                 sidebar
                 Divider()
-                    .background(CursorTheme.border)
+                    .background(CursorTheme.border(for: colorScheme))
                     .frame(width: 1)
                 contentArea
             }
         }
         .frame(width: 680, height: 520)
-        .background(CursorTheme.surface)
+        .background(CursorTheme.surface(for: colorScheme))
         .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: 20, style: .continuous)
-                .stroke(CursorTheme.border, lineWidth: 1)
+                .stroke(CursorTheme.border(for: colorScheme), lineWidth: 1)
         )
         .shadow(color: .black.opacity(0.35), radius: 24, y: 12)
     }
 
     private var header: some View {
-        HStack {
-            Text("Settings")
-                .font(.system(size: 17, weight: .semibold))
-                .foregroundStyle(CursorTheme.textPrimary)
-            Spacer()
-            Button("Close", action: { dismiss() })
-                .keyboardShortcut(.cancelAction)
-                .buttonStyle(DialogSecondaryButtonStyle())
+        VStack(alignment: .leading, spacing: 4) {
+            HStack {
+                Text("Settings")
+                    .font(.system(size: 17, weight: .semibold))
+                    .foregroundStyle(CursorTheme.textPrimary(for: colorScheme))
+                Spacer()
+                Button("Close", action: { dismiss() })
+                    .keyboardShortcut(.cancelAction)
+                    .buttonStyle(DialogSecondaryButtonStyle())
+            }
+            Text("Changes apply automatically.")
+                .font(.system(size: 12))
+                .foregroundStyle(CursorTheme.textTertiary(for: colorScheme))
         }
         .padding(.horizontal, 24)
         .padding(.vertical, 20)
     }
 
     private var sidebar: some View {
-        let unselectedForeground = Color.white.opacity(0.82)
+        let unselectedForeground = colorScheme == .dark ? Color.white.opacity(0.82) : Color.black.opacity(0.6)
         return List(SettingsPane.allCases, selection: $selectedPane) { pane in
             HStack(spacing: 8) {
                 Image(systemName: pane.icon)
                     .font(.system(size: 14, weight: .medium))
-                    .foregroundStyle(selectedPane == pane ? CursorTheme.textPrimary : unselectedForeground)
+                    .foregroundStyle(selectedPane == pane ? CursorTheme.textPrimary(for: colorScheme) : unselectedForeground)
                     .symbolRenderingMode(.monochrome)
                 Text(pane.rawValue)
-                    .foregroundStyle(selectedPane == pane ? CursorTheme.textPrimary : unselectedForeground)
+                    .foregroundStyle(selectedPane == pane ? CursorTheme.textPrimary(for: colorScheme) : unselectedForeground)
             }
             .tag(pane)
         }
         .listStyle(.sidebar)
         .scrollContentBackground(.hidden)
-        .background(CursorTheme.surfaceMuted.opacity(0.5))
+        .background(CursorTheme.surfaceMuted(for: colorScheme).opacity(0.5))
         .frame(width: sidebarWidth)
     }
 
@@ -114,6 +120,7 @@ struct SettingsModalView: View {
 // MARK: - Settings pane container (title + scroll + padding)
 
 private struct SettingsPaneContainer<Content: View>: View {
+    @Environment(\.colorScheme) private var colorScheme
     let title: String
     @ViewBuilder let content: () -> Content
 
@@ -122,7 +129,7 @@ private struct SettingsPaneContainer<Content: View>: View {
             VStack(alignment: .leading, spacing: 24) {
                 Text(title)
                     .font(.system(size: 17, weight: .semibold))
-                    .foregroundStyle(CursorTheme.textPrimary)
+                    .foregroundStyle(CursorTheme.textPrimary(for: colorScheme))
                 content()
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -134,24 +141,56 @@ private struct SettingsPaneContainer<Content: View>: View {
 // MARK: - General pane
 
 private struct GeneralSettingsPaneContent: View {
+    @Environment(\.colorScheme) private var colorScheme
     @AppStorage(AppPreferences.projectsRootPathKey) private var projectsRootPath: String = AppPreferences.defaultProjectsRootPath
+    @AppStorage(AppPreferences.preferredAppearanceKey) private var preferredAppearanceRaw: String = AppPreferences.defaultPreferredAppearance
 
     private var resolvedProjectsRootPath: String {
         AppPreferences.resolvedProjectsRootPath(projectsRootPath)
     }
 
+    private var preferredAppearance: PreferredAppearance {
+        PreferredAppearance(rawValue: preferredAppearanceRaw) ?? .system
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 24) {
+            // Appearance
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Appearance")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(CursorTheme.textTertiary(for: colorScheme))
+                    .textCase(.uppercase)
+                    .tracking(0.6)
+
+                Text("Choose light mode, dark mode, or follow the system setting.")
+                    .font(.system(size: 14))
+                    .foregroundStyle(CursorTheme.textSecondary(for: colorScheme))
+                    .fixedSize(horizontal: false, vertical: true)
+
+                Picker("", selection: Binding(
+                    get: { preferredAppearance },
+                    set: { preferredAppearanceRaw = $0.rawValue }
+                )) {
+                    ForEach(PreferredAppearance.allCases) { appearance in
+                        Text(appearance.displayName).tag(appearance)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .frame(maxWidth: 320)
+            }
+
             VStack(alignment: .leading, spacing: 12) {
                 Text("Project picker root")
                         .font(.system(size: 11, weight: .semibold))
-                        .foregroundStyle(CursorTheme.textTertiary)
+                        .foregroundStyle(CursorTheme.textTertiary(for: colorScheme))
                         .textCase(.uppercase)
                         .tracking(0.6)
 
                     Text("Direct subfolders from this directory appear in the workspace picker.")
                         .font(.system(size: 14))
-                        .foregroundStyle(CursorTheme.textSecondary)
+                        .foregroundStyle(CursorTheme.textSecondary(for: colorScheme))
                         .fixedSize(horizontal: false, vertical: true)
 
                     VStack(alignment: .leading, spacing: 10) {
@@ -159,21 +198,21 @@ private struct GeneralSettingsPaneContent: View {
                             HStack(spacing: 12) {
                                 Text(resolvedProjectsRootPath)
                                     .font(.system(size: 13))
-                                    .foregroundStyle(CursorTheme.textPrimary)
+                                    .foregroundStyle(CursorTheme.textPrimary(for: colorScheme))
                                     .lineLimit(1)
                                     .truncationMode(.middle)
                                     .frame(maxWidth: .infinity, alignment: .leading)
                                 Image(systemName: "folder.badge.plus")
                                     .font(.system(size: 16, weight: .medium))
-                                    .foregroundStyle(CursorTheme.textSecondary)
+                                    .foregroundStyle(CursorTheme.textSecondary(for: colorScheme))
                                     .symbolRenderingMode(.hierarchical)
                             }
                             .padding(.horizontal, 12)
                             .padding(.vertical, 10)
-                            .background(CursorTheme.editor, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                            .background(CursorTheme.editor(for: colorScheme), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
                             .overlay(
                                 RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                    .stroke(CursorTheme.borderStrong, lineWidth: 1)
+                                    .stroke(CursorTheme.borderStrong(for: colorScheme), lineWidth: 1)
                             )
                         }
                         .buttonStyle(.plain)
@@ -186,15 +225,15 @@ private struct GeneralSettingsPaneContent: View {
                         }
                     }
                     .padding(16)
-                    .background(CursorTheme.surfaceMuted.opacity(0.6), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    .background(CursorTheme.surfaceMuted(for: colorScheme).opacity(0.6), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
                     .overlay(
                         RoundedRectangle(cornerRadius: 12, style: .continuous)
-                            .stroke(CursorTheme.border.opacity(0.6), lineWidth: 1)
+                            .stroke(CursorTheme.border(for: colorScheme).opacity(0.6), lineWidth: 1)
                     )
 
                     Text("Current root: \(resolvedProjectsRootPath)")
                         .font(.system(size: 12))
-                        .foregroundStyle(CursorTheme.textTertiary)
+                        .foregroundStyle(CursorTheme.textTertiary(for: colorScheme))
                         .textSelection(.enabled)
                 }
             }
@@ -217,81 +256,108 @@ private struct GeneralSettingsPaneContent: View {
     }
 }
 
-// MARK: - Models pane
+// MARK: - Models pane (Cursor-like: toggles, default set, View All)
 
 private struct ModelsSettingsPaneContent: View {
+    @Environment(\.colorScheme) private var colorScheme
     @EnvironmentObject var appState: AppState
     @AppStorage(AppPreferences.disabledModelIdsKey) private var disabledModelIdsRaw: String = AppPreferences.defaultDisabledModelIdsRaw
+    @State private var modelSearchText: String = ""
+    @State private var showAllModels: Bool = false
+
+    private var allModelIds: Set<String> {
+        Set(appState.availableModels.map(\.id))
+    }
+
+    private func effectiveDisabled() -> Set<String> {
+        AppPreferences.effectiveDisabledModelIds(allIds: allModelIds, raw: disabledModelIdsRaw)
+    }
+
+    private var displayedModels: [ModelOption] {
+        let list = showAllModels
+            ? appState.availableModels
+            : appState.availableModels.filter { AvailableModels.isDefaultShown(modelId: $0.id) }
+        let search = modelSearchText.trimmingCharacters(in: .whitespaces).lowercased()
+        guard !search.isEmpty else { return list }
+        return list.filter {
+            $0.label.lowercased().contains(search) || $0.id.lowercased().contains(search)
+        }
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 24) {
-            VStack(alignment: .leading, spacing: 12) {
-                Text("Model picker")
-                        .font(.system(size: 11, weight: .semibold))
-                        .foregroundStyle(CursorTheme.textTertiary)
-                        .textCase(.uppercase)
-                        .tracking(0.6)
+            // Search and refresh
+            HStack(spacing: 8) {
+                TextField("Add or search model", text: $modelSearchText)
+                    .textFieldStyle(.roundedBorder)
+                Button {
+                    appState.loadModelsFromCLI()
+                } label: {
+                    Image(systemName: "arrow.clockwise")
+                        .font(.system(size: 14, weight: .medium))
+                }
+                .buttonStyle(.plain)
+                .help("Refresh model list")
+            }
 
-                    Text("Choose which models appear in the model picker. Uncheck to hide a model from the list.")
-                        .font(.system(size: 14))
-                        .foregroundStyle(CursorTheme.textSecondary)
-                        .fixedSize(horizontal: false, vertical: true)
-
-                    HStack(spacing: 8) {
-                        Button("Select all") {
-                            disabledModelIdsRaw = AppPreferences.defaultDisabledModelIdsRaw
-                        }
-                        .buttonStyle(.bordered)
-                        Button("Deselect all") {
-                            let allIds = Set(appState.availableModels.map(\.id))
-                            disabledModelIdsRaw = AppPreferences.rawFrom(disabledIds: allIds)
-                        }
-                        .buttonStyle(.bordered)
-                    }
-                    .tint(CursorTheme.brandBlue)
-
-                    VStack(alignment: .leading, spacing: 0) {
-                        ForEach(appState.availableModels, id: \.id) { model in
-                            Toggle(isOn: Binding(
-                                get: { !AppPreferences.disabledModelIds(from: disabledModelIdsRaw).contains(model.id) },
-                                set: { enabled in
-                                    var set = AppPreferences.disabledModelIds(from: disabledModelIdsRaw)
-                                    if enabled { set.remove(model.id) } else { set.insert(model.id) }
-                                    disabledModelIdsRaw = AppPreferences.rawFrom(disabledIds: set)
-                                }
-                            )) {
-                                HStack(spacing: 8) {
-                                    Text(model.label)
-                                        .font(.system(size: 14))
-                                        .foregroundStyle(CursorTheme.textPrimary)
-                                    if model.isPremium {
-                                        Text("Premium")
-                                            .font(.system(size: 10, weight: .medium))
-                                            .foregroundStyle(CursorTheme.textTertiary)
-                                            .padding(.horizontal, 6)
-                                            .padding(.vertical, 2)
-                                            .background(CursorTheme.surfaceMuted, in: Capsule())
-                                    }
-                                }
+            // Model list with native macOS toggles
+            VStack(alignment: .leading, spacing: 0) {
+                ForEach(displayedModels, id: \.id) { model in
+                    HStack(spacing: 12) {
+                        Image(systemName: "brain.head.profile")
+                            .font(.system(size: 14))
+                            .foregroundStyle(CursorTheme.textSecondary(for: colorScheme))
+                            .symbolRenderingMode(.hierarchical)
+                        Text(model.label)
+                            .font(.system(size: 14))
+                            .foregroundStyle(CursorTheme.textPrimary(for: colorScheme))
+                        Spacer(minLength: 8)
+                        Toggle("", isOn: Binding(
+                            get: { !effectiveDisabled().contains(model.id) },
+                            set: { enabled in
+                                var disabled = effectiveDisabled()
+                                if enabled { disabled.remove(model.id) } else { disabled.insert(model.id) }
+                                disabledModelIdsRaw = AppPreferences.rawFrom(disabledIds: disabled)
                             }
-                            .toggleStyle(.checkbox)
-                            .padding(.horizontal, 16)
-                            .padding(.vertical, 10)
-
-                            if model.id != appState.availableModels.last?.id {
-                                Divider()
-                                    .background(CursorTheme.border)
-                                    .padding(.leading, 16)
-                            }
-                        }
+                        ))
+                        .toggleStyle(.switch)
+                        .labelsHidden()
                     }
-                    .background(CursorTheme.surfaceMuted.opacity(0.6), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 12, style: .continuous)
-                            .stroke(CursorTheme.border.opacity(0.6), lineWidth: 1)
-                    )
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 10)
+
+                    if model.id != displayedModels.last?.id {
+                        Divider()
+                            .background(CursorTheme.border(for: colorScheme))
+                            .padding(.leading, 12)
+                    }
                 }
             }
+            .background(CursorTheme.surfaceMuted(for: colorScheme).opacity(0.6), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .stroke(CursorTheme.border(for: colorScheme).opacity(0.6), lineWidth: 1)
+            )
+
+            if !showAllModels {
+                Button("View All Models") {
+                    showAllModels = true
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(CursorTheme.brandBlue)
+                .font(.system(size: 14))
+            }
+
+            // API Keys section
+            DisclosureGroup("API Keys") {
+                Text("API key configuration can be managed in Cursor.")
+                    .font(.system(size: 13))
+                    .foregroundStyle(CursorTheme.textSecondary(for: colorScheme))
+                    .padding(.vertical, 8)
+            }
+            .font(.system(size: 14, weight: .medium))
+            .foregroundStyle(CursorTheme.textPrimary(for: colorScheme))
+        }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
@@ -299,13 +365,14 @@ private struct ModelsSettingsPaneContent: View {
 // MARK: - About pane
 
 private struct AboutPaneContent: View {
+    @Environment(\.colorScheme) private var colorScheme
     private let githubURL = "https://github.com/cursor-macosapp/cursor-macosapp"
 
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
             Text("Cursor+ is a native macOS menu bar app that works alongside Cursor. It gives you quick access to projects, composer, and Cursor features from the menu bar—open workspaces, jump into chat, or pop out the composer without switching apps.")
                 .font(.system(size: 14))
-                .foregroundStyle(CursorTheme.textSecondary)
+                .foregroundStyle(CursorTheme.textSecondary(for: colorScheme))
                 .fixedSize(horizontal: false, vertical: true)
 
             Image("CursorMetroLogo")
@@ -315,7 +382,7 @@ private struct AboutPaneContent: View {
 
             Text("GitHub")
                 .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(CursorTheme.textTertiary)
+                .foregroundStyle(CursorTheme.textTertiary(for: colorScheme))
                 .textCase(.uppercase)
                 .tracking(0.6)
 
@@ -337,5 +404,5 @@ private struct AboutPaneContent: View {
 #Preview {
     SettingsModalView()
         .padding(40)
-        .background(CursorTheme.panel)
+        .background(CursorTheme.panel(for: .dark))
 }
