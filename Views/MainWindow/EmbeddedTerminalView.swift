@@ -9,7 +9,7 @@ import Darwin
 struct EmbeddedTerminalView: NSViewRepresentable {
     /// Container that draws a terminal-like background and insets the terminal content so text doesn't hug the edges.
     final class TerminalContainerView: NSView {
-        static let contentInset: CGFloat = 12
+        static let contentInset: CGFloat = 18
 
         override init(frame frameRect: NSRect) {
             super.init(frame: frameRect)

@@ -11,8 +11,10 @@ struct TasksListView: View {
     var triggerAddNewTask: Binding<Bool> = .constant(false)
     /// When set, returns the linked agent status for a task (open / processing / done / stopped) to show a badge on the task row.
     var linkedStatusForTaskID: ((UUID) -> LinkedTaskStatus?)? = nil
-    /// Send task content to a new agent; when taskID is non-nil, the new agent is linked to that task. When screenshotPaths is non-empty, those paths (under .cursormetro) are attached to the prompt.
-    var onSendToAgent: (String, UUID?, [String]) -> Void
+    /// Models to show in the task model picker (same as input bar).
+    var models: [ModelOption]
+    /// Send task content to a new agent; when taskID is non-nil, the new agent is linked to that task. When screenshotPaths is non-empty, those paths (under .cursormetro) are attached to the prompt. modelId is the task's chosen model (e.g. "auto").
+    var onSendToAgent: (String, UUID?, [String], String) -> Void
     var onDismiss: () -> Void
 
     @State private var tasks: [ProjectTask] = []
@@ -22,15 +24,18 @@ struct TasksListView: View {
     @State private var showEditScreenshotFileImporter: Bool = false
     @State private var isAddingNewTask: Bool = false
     @State private var newTaskDraft: String = ""
+    @State private var newTaskModelId: String = AvailableModels.autoID
     @State private var newTaskScreenshots: [NSImage] = []
     @State private var showScreenshotFileImporter: Bool = false
     @FocusState private var isNewTaskFieldFocused: Bool
     @FocusState private var isTaskEditorFocused: Bool
-    /// When true, show only archived tasks completed in the last 24 hours. When false, show all archived.
-    @State private var showOnlyRecentArchived: Bool = true
-    /// Collapsed state for Todo and Archived sections (false = expanded).
+    /// When true, show only completed tasks completed in the last 24 hours. When false, show all completed.
+    @State private var showOnlyRecentCompleted: Bool = true
+    /// Collapsed state for Todo, Completed, and Deleted sections (false = expanded).
     @State private var todoSectionCollapsed: Bool = false
-    @State private var archivedSectionCollapsed: Bool = false
+    @State private var completedSectionCollapsed: Bool = true
+    @State private var deletedSectionCollapsed: Bool = true
+    @State private var deletedTasksList: [ProjectTask] = []
     /// When adding a new task, Cmd+V pastes screenshot from clipboard. Monitor is installed only while the new-task row is visible.
     @State private var newTaskPasteKeyMonitor: Any?
     /// When editing a task, Cmd+V pastes screenshot from clipboard.
@@ -38,34 +43,36 @@ struct TasksListView: View {
     /// URL for full-screen task screenshot preview (same pattern as PopoutView screenshot preview).
     @State private var taskScreenshotPreviewURL: URL? = nil
 
-    private static let archivedRecentInterval: TimeInterval = 24 * 60 * 60
+    private static let completedRecentInterval: TimeInterval = 24 * 60 * 60
 
     private func reloadTasks() {
         tasks = ProjectTasksStorage.tasks(workspacePath: workspacePath)
+        deletedTasksList = ProjectTasksStorage.deletedTasks(workspacePath: workspacePath)
     }
 
     private var todoTasks: [ProjectTask] {
         tasks.filter { !$0.completed }
     }
 
-    private var archivedTasks: [ProjectTask] {
+    private var completedTasks: [ProjectTask] {
         tasks.filter(\.completed)
     }
 
-    private var visibleArchivedTasks: [ProjectTask] {
-        let cutoff = Date().addingTimeInterval(-Self.archivedRecentInterval)
-        let filtered = showOnlyRecentArchived
-            ? archivedTasks.filter { ($0.completedAt ?? .distantPast) >= cutoff }
-            : archivedTasks
+    private var visibleCompletedTasks: [ProjectTask] {
+        let cutoff = Date().addingTimeInterval(-Self.completedRecentInterval)
+        let filtered = showOnlyRecentCompleted
+            ? completedTasks.filter { ($0.completedAt ?? .distantPast) >= cutoff }
+            : completedTasks
         return filtered.sorted { ($0.completedAt ?? .distantPast) >= ($1.completedAt ?? .distantPast) }
     }
 
     private func commitNewTask() {
         let trimmed = newTaskDraft.trimmingCharacters(in: .whitespacesAndNewlines)
         if !trimmed.isEmpty {
-            _ = ProjectTasksStorage.addTask(workspacePath: workspacePath, content: trimmed, screenshotImages: newTaskScreenshots)
+            _ = ProjectTasksStorage.addTask(workspacePath: workspacePath, content: trimmed, screenshotImages: newTaskScreenshots, modelId: newTaskModelId)
             reloadTasks()
             newTaskDraft = ""
+            newTaskModelId = AvailableModels.autoID
             newTaskScreenshots = []
         }
         isAddingNewTask = false
@@ -74,6 +81,7 @@ struct TasksListView: View {
 
     private func cancelNewTask() {
         newTaskDraft = ""
+        newTaskModelId = AvailableModels.autoID
         newTaskScreenshots = []
         isAddingNewTask = false
         isNewTaskFieldFocused = false
@@ -84,14 +92,18 @@ struct TasksListView: View {
             header
             Divider()
                 .background(CursorTheme.border(for: colorScheme))
-            ScrollView(.vertical, showsIndicators: true) {
-                LazyVStack(alignment: .leading, spacing: 8) {
-                    if todoTasks.isEmpty && visibleArchivedTasks.isEmpty && !isAddingNewTask {
-                        emptyState
-                    } else {
-                        if isAddingNewTask {
-                            newTaskRow
-                        }
+            ScrollViewReader { proxy in
+                ScrollView(.vertical, showsIndicators: true) {
+                    LazyVStack(alignment: .leading, spacing: 8) {
+                        Color.clear
+                            .frame(height: 0)
+                            .id("tasksScrollTop")
+                        if todoTasks.isEmpty && visibleCompletedTasks.isEmpty && deletedTasksList.isEmpty && !isAddingNewTask {
+                            emptyState
+                        } else {
+                            if isAddingNewTask {
+                                newTaskRow
+                            }
                         // Todo section
                         if !todoTasks.isEmpty {
                             sectionHeader("Todo", showFilter: false, isCollapsed: todoSectionCollapsed) {
@@ -103,16 +115,29 @@ struct TasksListView: View {
                                 }
                             }
                         }
-                        // Archived section (done tasks)
-                        if !archivedTasks.isEmpty {
-                            sectionHeader("Archived", showFilter: true, isCollapsed: archivedSectionCollapsed) {
-                                archivedSectionCollapsed.toggle()
+                        // Completed section (done tasks)
+                        if !completedTasks.isEmpty {
+                            sectionHeader("Completed", showFilter: true, isCollapsed: completedSectionCollapsed) {
+                                completedSectionCollapsed.toggle()
                             } onFilterToggle: {
-                                showOnlyRecentArchived.toggle()
+                                showOnlyRecentCompleted.toggle()
                             }
-                            if !archivedSectionCollapsed {
-                                ForEach(visibleArchivedTasks) { task in
+                            .padding(.top, 20)
+                            if !completedSectionCollapsed {
+                                ForEach(visibleCompletedTasks) { task in
                                     taskRow(task)
+                                }
+                            }
+                        }
+                        // Deleted section (soft-deleted tasks)
+                        if !deletedTasksList.isEmpty {
+                            sectionHeader("Deleted", showFilter: false, isCollapsed: deletedSectionCollapsed) {
+                                deletedSectionCollapsed.toggle()
+                            }
+                            .padding(.top, 20)
+                            if !deletedSectionCollapsed {
+                                ForEach(deletedTasksList) { task in
+                                    deletedTaskRow(task)
                                 }
                             }
                         }
@@ -121,6 +146,12 @@ struct TasksListView: View {
                 .padding(12)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .onChange(of: isAddingNewTask) { _, showing in
+                if showing {
+                    proxy.scrollTo("tasksScrollTop", anchor: .top)
+                }
+            }
+            }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .onAppear { reloadTasks() }
@@ -225,7 +256,7 @@ struct TasksListView: View {
             .buttonStyle(.plain)
             if showFilter, let onFilterToggle {
                 Button(action: onFilterToggle) {
-                    Text(showOnlyRecentArchived ? "Show all" : "Last 24 hours")
+                    Text(showOnlyRecentCompleted ? "Show all" : "Last 24 hours")
                         .font(.system(size: 12, weight: .medium))
                         .foregroundStyle(CursorTheme.brandBlue)
                 }
@@ -252,6 +283,7 @@ struct TasksListView: View {
         TaskRowView(
             task: task,
             workspacePath: workspacePath,
+            models: models,
             linkedTaskStatus: linkedStatusForTaskID?(task.id),
             isEditing: editingTask?.id == task.id,
             editDraft: $editingDraft,
@@ -273,7 +305,11 @@ struct TasksListView: View {
                 ProjectTasksStorage.updateTask(workspacePath: workspacePath, id: task.id, completed: !task.completed)
                 reloadTasks()
             },
-            onSendToAgent: { onSendToAgent(task.content, task.id, task.screenshotPaths) },
+            onSendToAgent: { onSendToAgent(task.content, task.id, task.screenshotPaths, task.modelId) },
+            onModelChange: { newId in
+                ProjectTasksStorage.updateTask(workspacePath: workspacePath, id: task.id, modelId: newId)
+                reloadTasks()
+            },
             onDelete: {
                 ProjectTasksStorage.deleteTask(workspacePath: workspacePath, id: task.id)
                 reloadTasks()
@@ -286,6 +322,59 @@ struct TasksListView: View {
                 reloadTasks()
             } : nil
         )
+    }
+
+    @ViewBuilder
+    private func deletedTaskRow(_ task: ProjectTask) -> some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: "trash")
+                .font(.system(size: 18))
+                .foregroundStyle(CursorTheme.textTertiary(for: colorScheme))
+            VStack(alignment: .leading, spacing: 4) {
+                Text(task.content)
+                    .font(.system(size: 14, weight: .regular))
+                    .foregroundStyle(CursorTheme.textTertiary(for: colorScheme))
+                    .strikethrough()
+                    .multilineTextAlignment(.leading)
+                    .lineLimit(4)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            Menu {
+                Button("Restore", systemImage: "arrow.uturn.backward") {
+                    ProjectTasksStorage.restoreTask(workspacePath: workspacePath, id: task.id)
+                    reloadTasks()
+                }
+                Divider()
+                Button("Delete permanently", systemImage: "trash", role: .destructive) {
+                    ProjectTasksStorage.permanentlyDeleteTask(workspacePath: workspacePath, id: task.id)
+                    reloadTasks()
+                }
+            } label: {
+                Image(systemName: "ellipsis")
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundStyle(CursorTheme.textSecondary(for: colorScheme))
+            }
+            .menuStyle(.borderlessButton)
+            .menuIndicator(.hidden)
+        }
+        .padding(12)
+        .background(CursorTheme.surfaceRaised(for: colorScheme), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .stroke(CursorTheme.border(for: colorScheme), lineWidth: 1)
+        )
+        .contextMenu {
+            Button("Restore", systemImage: "arrow.uturn.backward") {
+                ProjectTasksStorage.restoreTask(workspacePath: workspacePath, id: task.id)
+                reloadTasks()
+            }
+            Divider()
+            Button("Delete permanently", systemImage: "trash", role: .destructive) {
+                ProjectTasksStorage.permanentlyDeleteTask(workspacePath: workspacePath, id: task.id)
+                reloadTasks()
+            }
+        }
     }
 
     private var header: some View {
@@ -387,6 +476,12 @@ struct TasksListView: View {
                 showFileImporter: $showScreenshotFileImporter,
                 thumbnailSize: CGSize(width: 72, height: 72)
             )
+
+            ModelPickerView(
+                selectedModelId: newTaskModelId,
+                models: models,
+                onSelect: { newTaskModelId = $0 }
+            )
         }
         .padding(12)
         .background(CursorTheme.surfaceRaised(for: colorScheme), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
@@ -474,6 +569,7 @@ private struct TaskRowView: View {
     @Environment(\.colorScheme) private var colorScheme
     let task: ProjectTask
     let workspacePath: String
+    var models: [ModelOption] = []
     /// When set, show a badge for the linked agent status (processing / done / open / stopped).
     var linkedTaskStatus: LinkedTaskStatus? = nil
     var isEditing: Bool = false
@@ -486,6 +582,7 @@ private struct TaskRowView: View {
     let onCancelEdit: () -> Void
     let onToggleComplete: () -> Void
     let onSendToAgent: () -> Void
+    var onModelChange: ((String) -> Void)? = nil
     let onDelete: () -> Void
     var onPreviewScreenshot: ((String) -> Void)? = nil
     var onDeleteScreenshot: ((String) -> Void)? = nil
@@ -556,6 +653,13 @@ private struct TaskRowView: View {
                             )
                         }
                     }
+                }
+                if !task.completed, !models.isEmpty {
+                    ModelPickerView(
+                        selectedModelId: task.modelId,
+                        models: models,
+                        onSelect: { onModelChange?($0) }
+                    )
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)

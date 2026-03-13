@@ -162,6 +162,8 @@ struct PopoutView: View {
         if tab.isRunning { return .processing }
         if task.completed { return .done }
         if tab.turns.last?.displayState == .stopped { return .stopped }
+        // Agent finished speaking (last turn completed); show done instead of open.
+        if tab.turns.last?.displayState == .completed { return .done }
         return .open
     }
 
@@ -176,12 +178,13 @@ struct PopoutView: View {
             workspacePath: tasksPath,
             triggerAddNewTask: triggerAddNewTask,
             linkedStatusForTaskID: { taskID in linkedTaskStatusForTask(taskID: taskID, workspacePath: tasksPath) },
-            onSendToAgent: { prompt, taskID, screenshotPaths in
+            models: modelPickerModels(including: nil),
+            onSendToAgent: { prompt, taskID, screenshotPaths, modelId in
                 var initialPrompt = prompt
                 for path in screenshotPaths {
                     initialPrompt += "\n\n[Screenshot attached: .cursormetro/\(path)]"
                 }
-                if let newTab = addNewAgentTab(initialPrompt: initialPrompt, lastWorkspacePath: tasksPath) {
+                if let newTab = addNewAgentTab(initialPrompt: initialPrompt, lastWorkspacePath: tasksPath, modelId: modelId) {
                     if let taskID = taskID {
                         newTab.linkedTaskID = taskID
                     }
@@ -274,18 +277,17 @@ struct PopoutView: View {
         }
         closeTabConfirmationTabID = nil
     }
-    /// Adds a new agent tab and resets model to Auto so each new window starts with the default.
-    /// If initialPrompt is provided, the prompt is submitted automatically (e.g. when sending a task from the Tasks list).
+    /// Adds a new agent tab. If initialPrompt is provided, the prompt is submitted automatically (e.g. when sending a task from the Tasks list).
+    /// When modelId is provided (e.g. from a task), that tab uses that model; otherwise the tab uses the app default (Auto) until the user changes it.
     /// Returns the new tab so callers can set linkedTaskID etc.
     @discardableResult
-    private func addNewAgentTab(initialPrompt: String? = nil, lastWorkspacePath: String? = nil) -> AgentTab? {
+    private func addNewAgentTab(initialPrompt: String? = nil, lastWorkspacePath: String? = nil, modelId: String? = nil) -> AgentTab? {
         let targetWorkspacePath = lastWorkspacePath ?? tabManager.activeProjectPath
         guard let targetWorkspacePath else { return nil }
         if appState.isMainContentCollapsed {
             withAnimation(.easeInOut(duration: 0.2)) { appState.isMainContentCollapsed = false }
         }
-        guard let newTab = tabManager.addTab(initialPrompt: initialPrompt, workspacePath: targetWorkspacePath) else { return nil }
-        selectedModel = AvailableModels.autoID
+        guard let newTab = tabManager.addTab(initialPrompt: initialPrompt, workspacePath: targetWorkspacePath, modelId: modelId) else { return nil }
         // Refresh branch for the new tab so empty state shows correct branch immediately (avoids "No branch" on first paint).
         let (cur, list) = loadGitBranches(workspacePath: newTab.workspacePath)
         currentBranch = cur
@@ -310,12 +312,13 @@ struct PopoutView: View {
         PreferredTerminalApp(rawValue: preferredTerminalAppRawValue) ?? .automatic
     }
 
-    /// Models to show in the picker (respects "disabled" preference; uses default-enabled set when never set). Includes current selection if it was hidden so the UI stays consistent.
-    private var modelPickerModels: [ModelOption] {
+    /// Models to show in the picker (respects "disabled" preference; uses default-enabled set when never set). Includes effectiveSelection if it was hidden so the UI stays consistent.
+    private func modelPickerModels(including effectiveSelection: String? = nil) -> [ModelOption] {
         let allIds = Set(appState.availableModels.map(\.id))
         let disabled = AppPreferences.effectiveDisabledModelIds(allIds: allIds, raw: disabledModelIdsRaw)
         var visible = appState.visibleModels(disabledIds: disabled)
-        if !visible.contains(where: { $0.id == selectedModel }), let current = appState.model(for: selectedModel) {
+        let currentId = effectiveSelection ?? selectedModel
+        if !visible.contains(where: { $0.id == currentId }), let current = appState.model(for: currentId) {
             visible = visible + [current]
         }
         return visible
@@ -387,7 +390,6 @@ struct PopoutView: View {
                                     )
                                         .id(tab.id)
                                         .frame(maxWidth: .infinity, maxHeight: .infinity)
-                                        .padding(12)
                                         .opacity(tabManager.selectedTerminalID == tab.id ? 1 : 0)
                                         .allowsHitTesting(tabManager.selectedTerminalID == tab.id)
                                 }
@@ -755,41 +757,57 @@ struct PopoutView: View {
                                 .padding(.vertical, 4)
 
                                 ThreeDotMenuButton(size: .small, help: "Project options") {
-                                    Button("New Agent") {
+                                    Button {
                                         addNewAgentTab(lastWorkspacePath: group.path)
+                                    } label: {
+                                        Label("New Agent", systemImage: "plus.bubble")
                                     }
-                                    Button("New Terminal") {
+                                    Button {
                                         addNewTerminalTab(lastWorkspacePath: group.path)
+                                    } label: {
+                                        Label("New Terminal", systemImage: "terminal")
                                     }
-                                    Button("View Tasks") {
+                                    Button {
                                         if appState.isMainContentCollapsed {
                                             withAnimation(.easeInOut(duration: 0.2)) { appState.isMainContentCollapsed = false }
                                         }
                                         tabManager.showTasksView(workspacePath: group.path)
+                                    } label: {
+                                        Label("View Tasks", systemImage: "checklist")
                                     }
-                                    Button("Open in Cursor") {
+                                    Button {
                                         openProjectInCursor(group.path)
+                                    } label: {
+                                        Label("Open in Cursor", systemImage: "arrow.up.forward.app")
                                     }
-                                    Button("Open in Browser") {
+                                    Button {
                                         if let urlString = ProjectSettingsStorage.getDebugURL(workspacePath: group.path),
                                            let url = URL(string: urlString) {
                                             openURLInChrome(url)
                                         } else {
                                             openWorkspaceInFinder(workspacePath: group.path)
                                         }
+                                    } label: {
+                                        Label("Open in Browser", systemImage: "globe")
                                     }
                                     if gitHubRepositoryURL(workspacePath: group.path) != nil {
-                                        Button("Open in GitHub") {
+                                        Button {
                                             openProjectOnGitHub(group.path)
+                                        } label: {
+                                            Label("Github", systemImage: "link")
                                         }
                                     } else if !isGitRepository(workspacePath: group.path) {
-                                        Button("Git Init") {
+                                        Button {
                                             runGitInit(workspacePath: group.path)
+                                        } label: {
+                                            Label("Git Init", systemImage: "arrow.triangle.branch")
                                         }
                                     }
                                     Divider()
-                                    Button("Remove Project", role: .destructive) {
+                                    Button(role: .destructive) {
                                         removeProject(workspacePath: group.path)
+                                    } label: {
+                                        Label("Remove Project", systemImage: "trash")
                                     }
                                 }
                             }
@@ -1274,9 +1292,9 @@ struct PopoutView: View {
 
             HStack(alignment: .center, spacing: 8) {
                 ModelPickerView(
-                    selectedModelId: selectedModel,
-                    models: modelPickerModels,
-                    onSelect: { selectedModel = $0 }
+                    selectedModelId: tab.modelId ?? selectedModel,
+                    models: modelPickerModels(including: tab.modelId ?? selectedModel),
+                    onSelect: { tab.modelId = $0 }
                 )
 
                 GitBranchPickerView(
@@ -1702,7 +1720,8 @@ struct PopoutView: View {
                     guard currentTab.activeRunID == runID else { return }
                     currentTab.cursorChatId = chatId
                 }
-                let stream = try AgentRunner.stream(prompt: trimmed, workspacePath: currentTab.workspacePath, model: selectedModel, conversationId: currentTab.cursorChatId)
+                let modelToUse = currentTab.modelId ?? selectedModel
+                let stream = try AgentRunner.stream(prompt: trimmed, workspacePath: currentTab.workspacePath, model: modelToUse, conversationId: currentTab.cursorChatId)
                 guard currentTab.activeRunID == runID, currentTab.activeTurnID == turnID else { return }
                 // Coalesce text chunks and flush at ~100ms to reduce main-actor and UI churn during long runs.
                 var thinkingBuffer = ""

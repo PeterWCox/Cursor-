@@ -47,6 +47,60 @@ private func toolCallTint(for status: ToolCallSegmentStatus) -> Color {
     }
 }
 
+/// Fixed size for segment status icons so checkmark, thinking dots, and tool icons align.
+private let kSegmentStatusIconWidth: CGFloat = 24
+private let kSegmentStatusIconHeight: CGFloat = 12
+
+// MARK: - Shared segment block container
+
+/// Reusable card for conversation segment blocks (thinking, tool calls). Provides consistent
+/// layout, padding, background, and border; callers supply header row and optional body content.
+private struct SegmentBlockContainer<Header: View, Content: View>: View {
+    /// When non-nil, border uses this tint at 0.18 opacity (e.g. tool call status). When nil, uses `CursorTheme.border`.
+    var borderTint: Color? = nil
+    @ViewBuilder let header: () -> Header
+    @ViewBuilder let content: () -> Content
+
+    private var strokeStyle: (color: Color, lineWidth: CGFloat) {
+        if let tint = borderTint {
+            return (tint.opacity(0.18), 1)
+        }
+        return (CursorTheme.border, 1)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            header()
+            content()
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(12)
+        .background(CursorTheme.surfaceMuted, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .stroke(strokeStyle.color, lineWidth: strokeStyle.lineWidth)
+        )
+    }
+}
+
+/// Standard header row for segment blocks: fixed-size icon + title + spacer + trailing (e.g. chevron or status badge).
+private func segmentBlockHeaderRow<Icon: View, Trailing: View>(
+    @ViewBuilder icon: () -> Icon,
+    title: String,
+    titleColor: Color,
+    @ViewBuilder trailing: () -> Trailing
+) -> some View {
+    HStack(alignment: .firstTextBaseline, spacing: 8) {
+        icon()
+        Text(title)
+            .font(.system(size: 12, weight: .semibold))
+            .foregroundStyle(titleColor)
+            .lineLimit(2)
+        Spacer(minLength: 8)
+        trailing()
+    }
+}
+
 // MARK: - Animated thinking dots
 
 private struct ThinkingDotsView: View {
@@ -79,33 +133,38 @@ private struct ThinkingBlockView: View {
     @State private var isExpanded = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        SegmentBlockContainer(borderTint: nil) {
             Button {
                 withAnimation(.easeInOut(duration: 0.2)) { isExpanded.toggle() }
             } label: {
-                HStack(spacing: 8) {
-                    if isStreaming {
-                        ThinkingDotsView()
-                    } else {
-                        Image(systemName: "checkmark.circle")
-                            .font(.system(size: 11, weight: .semibold))
+                segmentBlockHeaderRow(
+                    icon: {
+                        Group {
+                            if isStreaming {
+                                ThinkingDotsView()
+                            } else {
+                                Image(systemName: "checkmark.circle")
+                                    .font(.system(size: 11, weight: .semibold))
+                                    .foregroundStyle(CursorTheme.textSecondary)
+                            }
+                        }
+                        .frame(width: kSegmentStatusIconWidth, height: kSegmentStatusIconHeight)
+                    },
+                    title: "Thinking",
+                    titleColor: CursorTheme.textSecondary,
+                    trailing: {
+                        Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
+                            .font(.system(size: 10, weight: .semibold))
                             .foregroundStyle(CursorTheme.textSecondary)
                     }
-                    Text("Thinking")
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(CursorTheme.textSecondary)
-                    Spacer(minLength: 8)
-                    Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
-                        .font(.system(size: 10, weight: .semibold))
-                        .foregroundStyle(CursorTheme.textSecondary)
-                }
+                )
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .onHover { isHovered in
                 if isHovered { NSCursor.pointingHand.push() } else { NSCursor.pop() }
             }
-
+        } content: {
             if isExpanded {
                 Group {
                     if renderAsPlainText {
@@ -122,13 +181,6 @@ private struct ThinkingBlockView: View {
                 }
             }
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(14)
-        .background(CursorTheme.surfaceMuted, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .stroke(CursorTheme.border, lineWidth: 1)
-        )
     }
 }
 
@@ -166,23 +218,27 @@ struct ConversationSegmentView: View, Equatable {
             }
         case .toolCall:
             if let toolCall = segment.toolCall {
-                VStack(alignment: .leading, spacing: 8) {
-                    HStack(alignment: .firstTextBaseline, spacing: 8) {
-                        Image(systemName: toolCallIcon(for: toolCall.status))
-                            .font(.system(size: 11, weight: .semibold))
-                            .foregroundStyle(toolCallTint(for: toolCall.status))
-                        Text(toolCall.title)
-                            .font(.system(size: 12, weight: .semibold))
-                            .foregroundStyle(CursorTheme.textPrimary)
-                            .lineLimit(2)
-                        Spacer(minLength: 8)
-                        Text(toolCallStatusLabel(for: toolCall.status))
-                            .font(.system(size: 10, weight: .semibold))
-                            .foregroundStyle(toolCallTint(for: toolCall.status))
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 4)
-                            .background(toolCallTint(for: toolCall.status).opacity(0.14), in: Capsule())
-                    }
+                let tint = toolCallTint(for: toolCall.status)
+                SegmentBlockContainer(borderTint: tint) {
+                    segmentBlockHeaderRow(
+                        icon: {
+                            Image(systemName: toolCallIcon(for: toolCall.status))
+                                .font(.system(size: 11, weight: .semibold))
+                                .foregroundStyle(tint)
+                                .frame(width: kSegmentStatusIconWidth, height: kSegmentStatusIconHeight)
+                        },
+                        title: toolCall.title,
+                        titleColor: CursorTheme.textPrimary,
+                        trailing: {
+                            Text(toolCallStatusLabel(for: toolCall.status))
+                                .font(.system(size: 10, weight: .semibold))
+                                .foregroundStyle(tint)
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 4)
+                                .background(tint.opacity(0.14), in: Capsule())
+                        }
+                    )
+                } content: {
                     if !toolCall.detail.isEmpty {
                         InlineText(markdown: toolCall.detail)
                             .font(.system(size: 11, weight: .regular, design: .monospaced))
@@ -192,14 +248,6 @@ struct ConversationSegmentView: View, Equatable {
                             .textual.textSelection(.enabled)
                     }
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 10)
-                .background(CursorTheme.surfaceMuted, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .stroke(toolCallTint(for: toolCall.status).opacity(0.18), lineWidth: 1)
-                )
             }
         }
     }

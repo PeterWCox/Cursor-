@@ -20,8 +20,10 @@ struct SavedAgentTab: Codable {
     var linkedTaskID: UUID?
     /// Cursor backend conversation ID; when set, used with --resume to continue the same conversation after restart.
     var cursorChatId: String?
+    /// Model ID for this tab (e.g. "auto", "gpt-5.4-medium"). When set, used when sending; otherwise app default is used.
+    var modelId: String?
 
-    init(id: UUID, title: String, workspacePath: String, currentBranch: String, prompt: String, turns: [ConversationTurn], hasAttachedScreenshot: Bool, followUpQueue: [QueuedFollowUp], linkedTaskID: UUID? = nil, cursorChatId: String? = nil) {
+    init(id: UUID, title: String, workspacePath: String, currentBranch: String, prompt: String, turns: [ConversationTurn], hasAttachedScreenshot: Bool, followUpQueue: [QueuedFollowUp], linkedTaskID: UUID? = nil, cursorChatId: String? = nil, modelId: String? = nil) {
         self.id = id
         self.title = title
         self.workspacePath = workspacePath
@@ -32,6 +34,7 @@ struct SavedAgentTab: Codable {
         self.followUpQueue = followUpQueue
         self.linkedTaskID = linkedTaskID
         self.cursorChatId = cursorChatId
+        self.modelId = modelId
     }
 
     init(from decoder: Decoder) throws {
@@ -46,10 +49,11 @@ struct SavedAgentTab: Codable {
         followUpQueue = try c.decode([QueuedFollowUp].self, forKey: .followUpQueue)
         linkedTaskID = try c.decodeIfPresent(UUID.self, forKey: .linkedTaskID)
         cursorChatId = try c.decodeIfPresent(String.self, forKey: .cursorChatId)
+        modelId = try c.decodeIfPresent(String.self, forKey: .modelId)
     }
 
     private enum CodingKeys: String, CodingKey {
-        case id, title, workspacePath, currentBranch, prompt, turns, hasAttachedScreenshot, followUpQueue, linkedTaskID, cursorChatId
+        case id, title, workspacePath, currentBranch, prompt, turns, hasAttachedScreenshot, followUpQueue, linkedTaskID, cursorChatId, modelId
     }
 }
 
@@ -165,6 +169,8 @@ class AgentTab: ObservableObject, Identifiable {
     @Published var followUpQueue: [QueuedFollowUp] = []
     /// When set, this agent is linked to a project task; sidebar shows that task's status (open / processing / done).
     @Published var linkedTaskID: UUID?
+    /// Model ID for this tab when sending (e.g. "auto"). When nil, app default is used.
+    @Published var modelId: String?
     var streamTask: Task<Void, Never>?
     var activeRunID: UUID?
     var activeTurnID: UUID?
@@ -201,6 +207,7 @@ class AgentTab: ObservableObject, Identifiable {
         self.followUpQueue = saved.followUpQueue
         self.linkedTaskID = saved.linkedTaskID
         self.cursorChatId = saved.cursorChatId
+        self.modelId = saved.modelId
         self.cachedConversationCharacterCount = Self.conversationCharacterCount(for: saved.turns)
     }
 
@@ -215,7 +222,8 @@ class AgentTab: ObservableObject, Identifiable {
             hasAttachedScreenshot: hasAttachedScreenshot,
             followUpQueue: followUpQueue,
             linkedTaskID: linkedTaskID,
-            cursorChatId: cursorChatId
+            cursorChatId: cursorChatId,
+            modelId: modelId
         )
     }
 
@@ -370,7 +378,7 @@ class TabManager: ObservableObject {
 
     /// Adds a new tab under the selected or supplied project.
     @discardableResult
-    func addTab(initialPrompt: String? = nil, workspacePath: String? = nil) -> AgentTab? {
+    func addTab(initialPrompt: String? = nil, workspacePath: String? = nil, modelId: String? = nil) -> AgentTab? {
         let path = workspacePath ?? activeProjectPath ?? activeTab?.workspacePath ?? ""
         let resolved = path.trimmingCharacters(in: .whitespacesAndNewlines)
         guard Self.workspacePathExists(resolved) else { return nil }
@@ -380,6 +388,9 @@ class TabManager: ObservableObject {
         let tab = AgentTab(title: "Agent \(tabs.count + 1)", workspacePath: resolved)
         if let prompt = initialPrompt, !prompt.isEmpty {
             tab.prompt = prompt
+        }
+        if let modelId = modelId {
+            tab.modelId = modelId
         }
         tabs.append(tab)
         observe(tab)
