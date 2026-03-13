@@ -106,7 +106,7 @@ struct ScreenshotCardView: View {
                     }
                     .buttonStyle(.plain)
                 }
-                .padding(12)
+                .padding(CursorTheme.paddingCard)
                 .background(cardBackground, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
                 .overlay(
                     RoundedRectangle(cornerRadius: 16, style: .continuous)

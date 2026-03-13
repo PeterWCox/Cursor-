@@ -30,8 +30,8 @@ struct ActionButton: View {
             }
             .font(.system(size: 12, weight: .medium))
             .foregroundStyle(style == .primary ? CursorTheme.textPrimary(for: colorScheme) : CursorTheme.textSecondary(for: colorScheme))
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
+            .padding(.horizontal, CursorTheme.paddingCard)
+            .padding(.vertical, CursorTheme.spaceS)
             .background(backgroundFill, in: Capsule())
             .overlay(Capsule().stroke(CursorTheme.border(for: colorScheme), lineWidth: 1))
         }

@@ -84,6 +84,75 @@ enum CursorTheme {
         )
     }
 
+    // MARK: - Spacing (use for padding, gaps, and layout consistency)
+
+    /// Extra small: inline gaps (e.g. icon + label).
+    static let spaceXXS: CGFloat = 2
+    /// Small: tight grouping (e.g. badge padding, compact controls).
+    static let spaceXS: CGFloat = 4
+    /// Default small: between related elements (e.g. list item spacing).
+    static let spaceS: CGFloat = 8
+    /// Medium: card padding, section inner spacing.
+    static let spaceM: CGFloat = 12
+    /// Large: headers, screen padding.
+    static let spaceL: CGFloat = 16
+    /// Extra large: section separation, modal padding.
+    static let spaceXL: CGFloat = 24
+    /// Double extra large: major sections, empty states.
+    static let spaceXXL: CGFloat = 32
+
+    /// Gap between a section/group title and its content (e.g. "Backlog" and first task).
+    static let gapSectionTitleToContent: CGFloat = 16
+    /// Padding inside cards (task row, conversation card, chip).
+    static let paddingCard: CGFloat = 12
+    /// Padding around scroll content or panel insets.
+    static let paddingPanel: CGFloat = 12
+    /// Horizontal padding for list/section headers.
+    static let paddingHeaderHorizontal: CGFloat = 16
+    /// Vertical padding for list/section headers.
+    static let paddingHeaderVertical: CGFloat = 12
+    /// Spacing between list items (e.g. task rows in a section).
+    static let spacingListItems: CGFloat = 8
+    /// Vertical gap between major sections (e.g. Todo vs Backlog).
+    static let gapBetweenSections: CGFloat = 20
+    /// Corner radius for cards (task row, raised surfaces).
+    static let radiusCard: CGFloat = 12
+    /// Small padding for badges and tags (horizontal).
+    static let paddingBadgeHorizontal: CGFloat = 5
+    /// Small padding for badges and tags (vertical).
+    static let paddingBadgeVertical: CGFloat = 2
+
+    // MARK: - Typography (use for font sizes to keep UI consistent)
+
+    /// Tiny / caption: badges, metadata, timestamps.
+    static let fontTiny: CGFloat = 9
+    /// Small caption: secondary labels, compact UI.
+    static let fontCaption: CGFloat = 10
+    /// Small: buttons, tertiary text, chips.
+    static let fontSmall: CGFloat = 11
+    /// Secondary: labels, filters, list secondary text.
+    static let fontSecondary: CGFloat = 12
+    /// Body small: dense content, descriptions.
+    static let fontBodySmall: CGFloat = 13
+    /// Body: main content, task text, default readable size.
+    static let fontBody: CGFloat = 14
+    /// Body emphasis: slightly larger for emphasis.
+    static let fontBodyEmphasis: CGFloat = 15
+    /// Subtitle: section subtitles, card titles.
+    static let fontSubtitle: CGFloat = 16
+    /// Title small: modal titles, section headers in settings.
+    static let fontTitleSmall: CGFloat = 17
+    /// Title: panel headers, list section titles.
+    static let fontTitle: CGFloat = 18
+    /// Title large: onboarding, prominent headings.
+    static let fontTitleLarge: CGFloat = 20
+    /// Display small: splash headings.
+    static let fontDisplaySmall: CGFloat = 22
+    /// Display: modal/sheet main title.
+    static let fontDisplay: CGFloat = 24
+    /// Icon/circle size for list bullets and toggles (visual, not font).
+    static let fontIconList: CGFloat = 18
+
     /// Panel background gradient for the given color scheme.
     static func panelGradient(for colorScheme: ColorScheme) -> LinearGradient {
         LinearGradient(

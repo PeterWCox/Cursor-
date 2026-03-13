@@ -188,8 +188,8 @@ struct TabChip: View {
                 .buttonStyle(.plain)
             }
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 7)
+        .padding(.horizontal, CursorTheme.paddingCard)
+        .padding(.vertical, CursorTheme.spaceS)
         .background(
             isSelected
                 ? CursorTheme.surfaceRaised(for: colorScheme)

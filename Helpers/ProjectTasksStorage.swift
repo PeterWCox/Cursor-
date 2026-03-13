@@ -19,8 +19,10 @@ struct ProjectTask: Identifiable, Codable, Equatable {
     var screenshotPaths: [String]
     /// Model ID to use when sending this task to an agent (e.g. "auto", "gpt-5.4-medium"). Defaults to Auto.
     var modelId: String
+    /// When true, task appears in Backlog section instead of Todo (only for non-completed tasks).
+    var backlog: Bool
 
-    init(id: UUID = UUID(), content: String, createdAt: Date = Date(), completed: Bool = false, completedAt: Date? = nil, deleted: Bool = false, deletedAt: Date? = nil, screenshotPaths: [String] = [], modelId: String = AvailableModels.autoID) {
+    init(id: UUID = UUID(), content: String, createdAt: Date = Date(), completed: Bool = false, completedAt: Date? = nil, deleted: Bool = false, deletedAt: Date? = nil, screenshotPaths: [String] = [], modelId: String = AvailableModels.autoID, backlog: Bool = false) {
         self.id = id
         self.content = content
         self.createdAt = createdAt
@@ -30,10 +32,11 @@ struct ProjectTask: Identifiable, Codable, Equatable {
         self.deletedAt = deletedAt
         self.screenshotPaths = screenshotPaths
         self.modelId = modelId
+        self.backlog = backlog
     }
 
     enum CodingKeys: String, CodingKey {
-        case id, content, createdAt, completed, completedAt, deleted, deletedAt, screenshotPath, screenshotPaths, modelId
+        case id, content, createdAt, completed, completedAt, deleted, deletedAt, screenshotPath, screenshotPaths, modelId, backlog
     }
 
     init(from decoder: Decoder) throws {
@@ -53,6 +56,7 @@ struct ProjectTask: Identifiable, Codable, Equatable {
             screenshotPaths = []
         }
         modelId = try c.decodeIfPresent(String.self, forKey: .modelId) ?? AvailableModels.autoID
+        backlog = try c.decodeIfPresent(Bool.self, forKey: .backlog) ?? false
     }
 
     func encode(to encoder: Encoder) throws {
@@ -66,6 +70,7 @@ struct ProjectTask: Identifiable, Codable, Equatable {
         try c.encodeIfPresent(deletedAt, forKey: .deletedAt)
         try c.encode(screenshotPaths, forKey: .screenshotPaths)
         try c.encode(modelId, forKey: .modelId)
+        try c.encode(backlog, forKey: .backlog)
     }
 }
 
@@ -147,7 +152,7 @@ enum ProjectTasksStorage {
         return task
     }
 
-    static func updateTask(workspacePath: String, id: UUID, content: String? = nil, completed: Bool? = nil, modelId: String? = nil) {
+    static func updateTask(workspacePath: String, id: UUID, content: String? = nil, completed: Bool? = nil, modelId: String? = nil, backlog: Bool? = nil) {
         var file = load(workspacePath: workspacePath)
         guard let index = file.tasks.firstIndex(where: { $0.id == id }) else { return }
         if let content = content { file.tasks[index].content = content }
@@ -156,6 +161,7 @@ enum ProjectTasksStorage {
             file.tasks[index].completedAt = completed ? Date() : nil
         }
         if let modelId = modelId { file.tasks[index].modelId = modelId }
+        if let backlog = backlog { file.tasks[index].backlog = backlog }
         save(workspacePath: workspacePath, file)
     }
 

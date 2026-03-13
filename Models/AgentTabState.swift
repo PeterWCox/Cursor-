@@ -376,14 +376,14 @@ class TabManager: ObservableObject {
         reconcileSelection(preferredProjectPath: selectedProjectPath)
     }
 
-    /// Adds a new tab under the selected or supplied project.
+    /// Adds a new tab under the selected or supplied project. When `select` is false, the new tab is created but the current selection (e.g. Tasks view or another tab) is left unchanged.
     @discardableResult
-    func addTab(initialPrompt: String? = nil, workspacePath: String? = nil, modelId: String? = nil) -> AgentTab? {
+    func addTab(initialPrompt: String? = nil, workspacePath: String? = nil, modelId: String? = nil, select: Bool = true) -> AgentTab? {
         let path = workspacePath ?? activeProjectPath ?? activeTab?.workspacePath ?? ""
         let resolved = path.trimmingCharacters(in: .whitespacesAndNewlines)
         guard Self.workspacePathExists(resolved) else { return nil }
 
-        addProject(path: resolved, select: true)
+        addProject(path: resolved, select: select)
 
         let tab = AgentTab(title: "Agent \(tabs.count + 1)", workspacePath: resolved)
         if let prompt = initialPrompt, !prompt.isEmpty {
@@ -394,10 +394,12 @@ class TabManager: ObservableObject {
         }
         tabs.append(tab)
         observe(tab)
-        selectedTabID = tab.id
-        selectedTerminalID = nil
-        selectedTasksViewPath = nil
-        selectedProjectPath = resolved
+        if select {
+            selectedTabID = tab.id
+            selectedTerminalID = nil
+            selectedTasksViewPath = nil
+            selectedProjectPath = resolved
+        }
         return tab
     }
 
@@ -518,13 +520,18 @@ class TabManager: ObservableObject {
         tabs.forEach(observe)
     }
 
-    /// Subscriptions are kept for potential future use (e.g. persistence triggers). We intentionally do *not*
-    /// forward tab.objectWillChange to TabManager so that streaming in one tab doesn't invalidate the whole UI.
+    /// We only forward tab.objectWillChange when the Tasks view is showing and this tab is linked to a task in that workspace,
+    /// so the task list can update "processing" / "done" badges without re-rendering the whole window on every stream chunk.
     private func observe(_ tab: AgentTab) {
         guard tabSubscriptions[tab.id] == nil else { return }
-        tabSubscriptions[tab.id] = tab.objectWillChange.sink { _ in
-            // No-op: do not call self?.objectWillChange.send(). Views that need tab updates observe the tab directly.
-        }
+        tabSubscriptions[tab.id] = tab.objectWillChange
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                guard let self else { return }
+                if self.selectedTasksViewPath == tab.workspacePath, tab.linkedTaskID != nil {
+                    self.objectWillChange.send()
+                }
+            }
     }
 
     private func reconcileSelection(preferredProjectPath: String? = nil) {

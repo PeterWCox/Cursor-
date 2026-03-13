@@ -74,7 +74,7 @@ private struct SegmentBlockContainer<Header: View, Content: View>: View {
             content()
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(12)
+        .padding(CursorTheme.paddingCard)
         .background(CursorTheme.surfaceMuted, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: 12, style: .continuous)

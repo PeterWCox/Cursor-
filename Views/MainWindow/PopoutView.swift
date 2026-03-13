@@ -173,18 +173,29 @@ struct PopoutView: View {
         return linkedTaskStatus(for: tab)
     }
 
+    /// Builds [taskID: status] for the given workspace so the Tasks list has an explicit dependency on tab state and updates when linked tabs run/complete.
+    private func linkedStatusesForWorkspace(_ workspacePath: String) -> [UUID: LinkedTaskStatus] {
+        var result: [UUID: LinkedTaskStatus] = [:]
+        for tab in tabManager.tabs where tab.workspacePath == workspacePath {
+            guard let taskID = tab.linkedTaskID else { continue }
+            result[taskID] = linkedTaskStatus(for: tab)
+        }
+        return result
+    }
+
     private func tasksListContent(tasksPath: String, triggerAddNewTask: Binding<Bool>) -> some View {
-        TasksListView(
+        let linkedStatuses = linkedStatusesForWorkspace(tasksPath)
+        return TasksListView(
             workspacePath: tasksPath,
             triggerAddNewTask: triggerAddNewTask,
-            linkedStatusForTaskID: { taskID in linkedTaskStatusForTask(taskID: taskID, workspacePath: tasksPath) },
+            linkedStatuses: linkedStatuses,
             models: modelPickerModels(including: nil),
             onSendToAgent: { prompt, taskID, screenshotPaths, modelId in
                 var initialPrompt = prompt
                 for path in screenshotPaths {
                     initialPrompt += "\n\n[Screenshot attached: .cursormetro/\(path)]"
                 }
-                if let newTab = addNewAgentTab(initialPrompt: initialPrompt, lastWorkspacePath: tasksPath, modelId: modelId) {
+                if let newTab = addNewAgentTab(initialPrompt: initialPrompt, lastWorkspacePath: tasksPath, modelId: modelId, select: false) {
                     if let taskID = taskID {
                         newTab.linkedTaskID = taskID
                     }
@@ -192,7 +203,7 @@ struct PopoutView: View {
                         newTab.hasAttachedScreenshot = true
                     }
                 }
-                tabManager.hideTasksView()
+                // Keep user on Tasks view; do not switch to the new agent tab
             },
             onDismiss: { tabManager.hideTasksView() }
         )
@@ -279,15 +290,16 @@ struct PopoutView: View {
     }
     /// Adds a new agent tab. If initialPrompt is provided, the prompt is submitted automatically (e.g. when sending a task from the Tasks list).
     /// When modelId is provided (e.g. from a task), that tab uses that model; otherwise the tab uses the app default (Auto) until the user changes it.
+    /// When select is false, the new tab is created but the current view (e.g. Tasks list) is not changed.
     /// Returns the new tab so callers can set linkedTaskID etc.
     @discardableResult
-    private func addNewAgentTab(initialPrompt: String? = nil, lastWorkspacePath: String? = nil, modelId: String? = nil) -> AgentTab? {
+    private func addNewAgentTab(initialPrompt: String? = nil, lastWorkspacePath: String? = nil, modelId: String? = nil, select: Bool = true) -> AgentTab? {
         let targetWorkspacePath = lastWorkspacePath ?? tabManager.activeProjectPath
         guard let targetWorkspacePath else { return nil }
         if appState.isMainContentCollapsed {
             withAnimation(.easeInOut(duration: 0.2)) { appState.isMainContentCollapsed = false }
         }
-        guard let newTab = tabManager.addTab(initialPrompt: initialPrompt, workspacePath: targetWorkspacePath, modelId: modelId) else { return nil }
+        guard let newTab = tabManager.addTab(initialPrompt: initialPrompt, workspacePath: targetWorkspacePath, modelId: modelId, select: select) else { return nil }
         // Refresh branch for the new tab so empty state shows correct branch immediately (avoids "No branch" on first paint).
         let (cur, list) = loadGitBranches(workspacePath: newTab.workspacePath)
         currentBranch = cur
@@ -779,7 +791,7 @@ struct PopoutView: View {
                                     Button {
                                         openProjectInCursor(group.path)
                                     } label: {
-                                        Label("Open in Cursor", systemImage: "arrow.up.forward.app")
+                                        Label("Cursor", systemImage: "arrow.up.forward.app")
                                     }
                                     Button {
                                         if let urlString = ProjectSettingsStorage.getDebugURL(workspacePath: group.path),
@@ -789,13 +801,18 @@ struct PopoutView: View {
                                             openWorkspaceInFinder(workspacePath: group.path)
                                         }
                                     } label: {
-                                        Label("Open in Browser", systemImage: "globe")
+                                        Label("Browser", systemImage: "globe")
                                     }
                                     if gitHubRepositoryURL(workspacePath: group.path) != nil {
                                         Button {
                                             openProjectOnGitHub(group.path)
                                         } label: {
-                                            Label("Github", systemImage: "link")
+                                            Label {
+                                                Text("Github")
+                                            } icon: {
+                                                Image("GitHubIcon")
+                                                    .renderingMode(.template)
+                                            }
                                         }
                                     } else if !isGitRepository(workspacePath: group.path) {
                                         Button {
@@ -1061,7 +1078,7 @@ struct PopoutView: View {
                     Button(action: {
                         openProjectInCursor(projectPath)
                     }) {
-                        Label("Open in Cursor", systemImage: "arrow.up.forward.app")
+                        Label("Cursor", systemImage: "arrow.up.forward.app")
                             .font(.system(size: 15, weight: .medium))
                             .foregroundStyle(CursorTheme.textPrimary(for: colorScheme))
                             .padding(.horizontal, 18)
