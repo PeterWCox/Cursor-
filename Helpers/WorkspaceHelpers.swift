@@ -458,3 +458,89 @@ private func runAppleScript(_ script: String) -> String? {
 
     return nil
 }
+
+// MARK: - Open in Browser (Chrome or directory)
+
+private let chromeBundleId = "com.google.Chrome"
+
+/// Opens the URL in Google Chrome if installed; otherwise opens in the default browser.
+func openURLInChrome(_ url: URL) {
+    guard let chromeURL = NSWorkspace.shared.urlForApplication(withBundleIdentifier: chromeBundleId) else {
+        NSWorkspace.shared.open(url)
+        return
+    }
+    NSWorkspace.shared.open([url], withApplicationAt: chromeURL, configuration: NSWorkspace.OpenConfiguration()) { _, error in
+        if error != nil {
+            NSWorkspace.shared.open(url)
+        }
+    }
+}
+
+/// Opens the workspace directory in Finder.
+func openWorkspaceInFinder(workspacePath: String) {
+    let url = URL(fileURLWithPath: workspacePath)
+    guard FileManager.default.fileExists(atPath: url.path) else { return }
+    NSWorkspace.shared.open(url)
+}
+
+// MARK: - Startup script (run with bash in terminal)
+
+/// Launches the project's startup script (path in .cursormetro/project.json) with bash in the preferred terminal.
+/// Script path is relative to workspace or absolute. Returns an error message on failure, nil on success.
+func launchStartupScript(workspacePath: String, preferredTerminal: PreferredTerminalApp) -> String? {
+    guard let scriptSpec = ProjectSettingsStorage.getStartupScript(workspacePath: workspacePath),
+          !scriptSpec.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+        return "No startup script configured for this project. Set it in Settings → Project settings."
+    }
+
+    let workspaceURL = URL(fileURLWithPath: workspacePath)
+    let scriptPath: String
+    if (scriptSpec as NSString).isAbsolutePath {
+        scriptPath = scriptSpec
+    } else {
+        scriptPath = workspaceURL.appendingPathComponent(scriptSpec).path
+    }
+
+    guard FileManager.default.fileExists(atPath: scriptPath) else {
+        return "Startup script not found: \(scriptSpec)"
+    }
+
+    guard let terminal = resolvedTerminalApp(for: preferredTerminal) else {
+        return "No supported terminal app is available. Install Terminal or iTerm."
+    }
+
+    let quotedPath = singleQuotedShellValue(workspacePath)
+    let quotedScript = singleQuotedShellValue(scriptPath)
+    let command = "cd \(quotedPath) && /bin/bash \(quotedScript)"
+
+    switch terminal {
+    case .automatic:
+        return "No supported terminal app is available. Install Terminal or iTerm."
+    case .terminal:
+        return runAppleScript("""
+        tell application id "com.apple.Terminal"
+            activate
+            if (count of windows) = 0 then
+                do script "\(appleScriptEscaped(command))"
+            else
+                do script "\(appleScriptEscaped(command))" in front window
+            end if
+        end tell
+        """)
+    case .iTerm:
+        return runAppleScript("""
+        tell application id "com.googlecode.iterm2"
+            activate
+            if (count of windows) = 0 then
+                create window with default profile
+            end if
+            tell current window
+                create tab with default profile
+                tell current session of current tab
+                    write text "\(appleScriptEscaped(command))"
+                end tell
+            end tell
+        end tell
+        """)
+    }
+}

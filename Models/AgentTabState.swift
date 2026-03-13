@@ -16,6 +16,37 @@ struct SavedAgentTab: Codable {
     var turns: [ConversationTurn]
     var hasAttachedScreenshot: Bool
     var followUpQueue: [QueuedFollowUp]
+    /// When set, this agent is linked to a project task; used to show task status (open / processing / done) in the sidebar.
+    var linkedTaskID: UUID?
+
+    init(id: UUID, title: String, workspacePath: String, currentBranch: String, prompt: String, turns: [ConversationTurn], hasAttachedScreenshot: Bool, followUpQueue: [QueuedFollowUp], linkedTaskID: UUID? = nil) {
+        self.id = id
+        self.title = title
+        self.workspacePath = workspacePath
+        self.currentBranch = currentBranch
+        self.prompt = prompt
+        self.turns = turns
+        self.hasAttachedScreenshot = hasAttachedScreenshot
+        self.followUpQueue = followUpQueue
+        self.linkedTaskID = linkedTaskID
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(UUID.self, forKey: .id)
+        title = try c.decode(String.self, forKey: .title)
+        workspacePath = try c.decode(String.self, forKey: .workspacePath)
+        currentBranch = try c.decode(String.self, forKey: .currentBranch)
+        prompt = try c.decode(String.self, forKey: .prompt)
+        turns = try c.decode([ConversationTurn].self, forKey: .turns)
+        hasAttachedScreenshot = try c.decode(Bool.self, forKey: .hasAttachedScreenshot)
+        followUpQueue = try c.decode([QueuedFollowUp].self, forKey: .followUpQueue)
+        linkedTaskID = try c.decodeIfPresent(UUID.self, forKey: .linkedTaskID)
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id, title, workspacePath, currentBranch, prompt, turns, hasAttachedScreenshot, followUpQueue, linkedTaskID
+    }
 }
 
 struct SavedTabState: Codable {
@@ -50,6 +81,15 @@ struct SavedTabState: Codable {
         projects = try container.decodeIfPresent([SavedProject].self, forKey: .projects) ?? []
         selectedProjectPath = try container.decodeIfPresent(String.self, forKey: .selectedProjectPath)
     }
+}
+
+// MARK: - Linked task status (for sidebar display)
+
+/// Status of the task linked to an agent: open (not done), processing (agent running), or done (task completed).
+enum LinkedTaskStatus: String, Equatable {
+    case open
+    case processing
+    case done
 }
 
 enum TabManagerPersistence {
@@ -118,6 +158,8 @@ class AgentTab: ObservableObject, Identifiable {
     @Published var scrollToken = UUID()
     /// Messages to send one-by-one as soon as the agent finishes each response.
     @Published var followUpQueue: [QueuedFollowUp] = []
+    /// When set, this agent is linked to a project task; sidebar shows that task's status (open / processing / done).
+    @Published var linkedTaskID: UUID?
     var streamTask: Task<Void, Never>?
     var activeRunID: UUID?
     var activeTurnID: UUID?
@@ -152,6 +194,7 @@ class AgentTab: ObservableObject, Identifiable {
         self.turns = saved.turns
         self.hasAttachedScreenshot = saved.hasAttachedScreenshot
         self.followUpQueue = saved.followUpQueue
+        self.linkedTaskID = saved.linkedTaskID
         self.cachedConversationCharacterCount = Self.conversationCharacterCount(for: saved.turns)
     }
 
@@ -164,7 +207,8 @@ class AgentTab: ObservableObject, Identifiable {
             prompt: prompt,
             turns: turns,
             hasAttachedScreenshot: hasAttachedScreenshot,
-            followUpQueue: followUpQueue
+            followUpQueue: followUpQueue,
+            linkedTaskID: linkedTaskID
         )
     }
 
@@ -190,6 +234,8 @@ class TabManager: ObservableObject {
     @Published var terminalTabs: [TerminalTab] = []
     @Published var selectedTabID: UUID?
     @Published var selectedTerminalID: UUID?
+    /// When non-nil, main content shows the Tasks view for this project (instead of Agent or Terminal).
+    @Published var selectedTasksViewPath: String?
     @Published var selectedProjectPath: String?
     /// Stack of recently closed tabs (most recent last) for "Reopen closed tab" (Cmd+Shift+T). Capped at 20.
     @Published private(set) var recentlyClosedTabs: [SavedAgentTab] = []
@@ -235,15 +281,15 @@ class TabManager: ObservableObject {
         TabManagerPersistence.save(state)
     }
 
-    /// Current agent tab, or nil when a terminal tab is selected or there are no tabs.
+    /// Current agent tab, or nil when a terminal tab, tasks view, or no tab is selected.
     var activeTab: AgentTab? {
-        guard selectedTerminalID == nil, let selectedTabID else { return nil }
+        guard selectedTerminalID == nil, selectedTasksViewPath == nil, let selectedTabID else { return nil }
         return tabs.first { $0.id == selectedTabID }
     }
 
-    /// Current terminal tab, or nil when an agent tab is selected or no terminal is open.
+    /// Current terminal tab, or nil when an agent tab, tasks view, or no terminal is selected.
     var activeTerminalTab: TerminalTab? {
-        guard let selectedTerminalID else { return nil }
+        guard selectedTasksViewPath == nil, let selectedTerminalID else { return nil }
         return terminalTabs.first { $0.id == selectedTerminalID }
     }
 
@@ -283,16 +329,36 @@ class TabManager: ObservableObject {
         selectedProjectPath = path
         if let selectedTab = activeTab, selectedTab.workspacePath == path { return }
         if let selectedTerminal = activeTerminalTab, selectedTerminal.workspacePath == path { return }
+        if selectedTasksViewPath == path { return }
         if let firstTab = tabs.first(where: { $0.workspacePath == path }) {
             selectedTabID = firstTab.id
             selectedTerminalID = nil
+            selectedTasksViewPath = nil
         } else if let firstTerminal = terminalTabs.first(where: { $0.workspacePath == path }) {
             selectedTerminalID = firstTerminal.id
             selectedTabID = nil
+            selectedTasksViewPath = nil
         } else {
             selectedTabID = nil
             selectedTerminalID = nil
+            selectedTasksViewPath = nil
         }
+    }
+
+    /// Show the Tasks view for the given project (like selecting a Terminal tab).
+    func showTasksView(workspacePath path: String) {
+        let resolved = path.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard projects.contains(where: { $0.path == resolved }) else { return }
+        selectedProjectPath = resolved
+        selectedTasksViewPath = resolved
+        selectedTabID = nil
+        selectedTerminalID = nil
+    }
+
+    /// Leave Tasks view and return to Agent/Terminal selection for the current project.
+    func hideTasksView() {
+        selectedTasksViewPath = nil
+        reconcileSelection(preferredProjectPath: selectedProjectPath)
     }
 
     /// Adds a new tab under the selected or supplied project.
@@ -312,6 +378,7 @@ class TabManager: ObservableObject {
         observe(tab)
         selectedTabID = tab.id
         selectedTerminalID = nil
+        selectedTasksViewPath = nil
         selectedProjectPath = resolved
         return tab
     }
@@ -327,6 +394,7 @@ class TabManager: ObservableObject {
         terminalTabs.append(tab)
         selectedTerminalID = tab.id
         selectedTabID = nil
+        selectedTasksViewPath = nil
         selectedProjectPath = resolved
         return tab
     }
@@ -340,11 +408,14 @@ class TabManager: ObservableObject {
         if wasSelected {
             if let replacement = terminalTabs.first(where: { $0.workspacePath == closedPath }) {
                 selectedTerminalID = replacement.id
+                selectedTasksViewPath = nil
             } else if let firstAgent = tabs.first(where: { $0.workspacePath == closedPath }) {
                 selectedTerminalID = nil
                 selectedTabID = firstAgent.id
+                selectedTasksViewPath = nil
             } else {
                 selectedTerminalID = nil
+                selectedTasksViewPath = (selectedTasksViewPath == closedPath ? closedPath : selectedTasksViewPath)
             }
             selectedProjectPath = closedPath
         }
@@ -365,14 +436,17 @@ class TabManager: ObservableObject {
                 if let replacement = tabs.first(where: { $0.workspacePath == closedProjectPath }) {
                     selectedTabID = replacement.id
                     selectedTerminalID = nil
+                    selectedTasksViewPath = nil
                     selectedProjectPath = replacement.workspacePath
                 } else if let firstTerminal = terminalTabs.first(where: { $0.workspacePath == closedProjectPath }) {
                     selectedTabID = nil
                     selectedTerminalID = firstTerminal.id
+                    selectedTasksViewPath = nil
                     selectedProjectPath = closedProjectPath
                 } else {
                     selectedTabID = nil
                     selectedTerminalID = nil
+                    selectedTasksViewPath = (selectedTasksViewPath == closedProjectPath ? closedProjectPath : selectedTasksViewPath)
                     selectedProjectPath = closedProjectPath
                 }
             }
@@ -396,6 +470,9 @@ class TabManager: ObservableObject {
 
         if selectedProjectWasRemoved {
             selectedProjectPath = nil
+        }
+        if selectedTasksViewPath == path {
+            selectedTasksViewPath = nil
         }
         if let activeTab, activeTab.workspacePath == path {
             selectedTabID = nil

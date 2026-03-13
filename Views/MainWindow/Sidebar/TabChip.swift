@@ -34,6 +34,8 @@ struct TabChip: View {
     var latestTurnState: ConversationTurnDisplayState? = nil
     /// True if the user has sent at least one message in this tab (so we can show completion icon).
     var hasPrompted: Bool = true
+    /// When set, show the status of the task linked to this agent (open / processing / done).
+    var linkedTaskStatus: LinkedTaskStatus? = nil
     let showClose: Bool
     var compact: Bool = false
     let onSelect: () -> Void
@@ -101,11 +103,16 @@ struct TabChip: View {
 
             if let sub = subtitle, !sub.isEmpty {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(title)
-                        .font(.system(size: 12, weight: isSelected ? .semibold : .medium))
-                        .foregroundStyle(isSelected ? CursorTheme.textPrimary : CursorTheme.textSecondary)
-                        .lineLimit(1)
-                        .truncationMode(.tail)
+                    HStack(spacing: 6) {
+                        Text(title)
+                            .font(.system(size: 12, weight: isSelected ? .semibold : .medium))
+                            .foregroundStyle(isSelected ? CursorTheme.textPrimary : CursorTheme.textSecondary)
+                            .lineLimit(1)
+                            .truncationMode(.tail)
+                        if let status = linkedTaskStatus {
+                            linkedTaskStatusBadge(status)
+                        }
+                    }
                     HStack(spacing: 4) {
                         if let path = workspacePath, !path.isEmpty {
                             ProjectIconView(path: path)
@@ -133,11 +140,16 @@ struct TabChip: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
             } else if let branch = branchName, !branch.isEmpty {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(title)
-                        .font(.system(size: 12, weight: isSelected ? .semibold : .medium))
-                        .foregroundStyle(isSelected ? CursorTheme.textPrimary : CursorTheme.textSecondary)
-                        .lineLimit(1)
-                        .truncationMode(.tail)
+                    HStack(spacing: 6) {
+                        Text(title)
+                            .font(.system(size: 12, weight: isSelected ? .semibold : .medium))
+                            .foregroundStyle(isSelected ? CursorTheme.textPrimary : CursorTheme.textSecondary)
+                            .lineLimit(1)
+                            .truncationMode(.tail)
+                        if let status = linkedTaskStatus {
+                            linkedTaskStatusBadge(status)
+                        }
+                    }
                     HStack(spacing: 4) {
                         Image(systemName: "arrow.triangle.branch")
                             .font(.system(size: 9, weight: .medium))
@@ -151,12 +163,17 @@ struct TabChip: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
             } else {
-                Text(title)
-                    .font(.system(size: 12, weight: isSelected ? .semibold : .medium))
-                    .foregroundStyle(isSelected ? CursorTheme.textPrimary : CursorTheme.textSecondary)
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-                    .frame(maxWidth: 160, alignment: .leading)
+                HStack(spacing: 6) {
+                    Text(title)
+                        .font(.system(size: 12, weight: isSelected ? .semibold : .medium))
+                        .foregroundStyle(isSelected ? CursorTheme.textPrimary : CursorTheme.textSecondary)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                    if let status = linkedTaskStatus {
+                        linkedTaskStatusBadge(status)
+                    }
+                }
+                .frame(maxWidth: 160, alignment: .leading)
             }
 
             if showClose {
@@ -182,6 +199,32 @@ struct TabChip: View {
             RoundedRectangle(cornerRadius: 10, style: .continuous)
                 .stroke(isSelected ? CursorTheme.borderStrong : CursorTheme.border.opacity(0.6), lineWidth: 1)
         )
+    }
+
+    @ViewBuilder
+    private func linkedTaskStatusBadge(_ status: LinkedTaskStatus) -> some View {
+        let (icon, color, label) = statusDisplay(status)
+        HStack(spacing: 2) {
+            Image(systemName: icon)
+                .font(.system(size: 9, weight: .semibold))
+            Text(label)
+                .font(.system(size: 10, weight: .medium))
+        }
+        .foregroundStyle(color)
+        .padding(.horizontal, 5)
+        .padding(.vertical, 2)
+        .background(color.opacity(0.2), in: RoundedRectangle(cornerRadius: 4, style: .continuous))
+    }
+
+    private func statusDisplay(_ status: LinkedTaskStatus) -> (icon: String, color: Color, label: String) {
+        switch status {
+        case .open:
+            return ("circle", CursorTheme.textTertiary, "open")
+        case .processing:
+            return ("arrow.trianglehead.2.clockwise.rotate.90", CursorTheme.brandBlue, "processing")
+        case .done:
+            return ("checkmark.circle.fill", Color.green, "done")
+        }
     }
 }
 

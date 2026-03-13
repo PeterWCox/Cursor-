@@ -14,7 +14,8 @@ struct KeyboardShortcutsContentView: View {
     private static let sections: [(title: String, rows: [ShortcutRow])] = [
         ("Tabs", [
             ShortcutRow(keys: ["⌘N", "⌘T"], action: "New agent (same project)"),
-            ShortcutRow(keys: ["⌘P", "⌘O"], action: "Add project"),
+            ShortcutRow(keys: ["⌘P"], action: "Add project"),
+            ShortcutRow(keys: ["⌘O"], action: "Open in Browser (or set URL)"),
             ShortcutRow(keys: ["⌘W"], action: "Close tab"),
             ShortcutRow(keys: ["⌘⇧T"], action: "Reopen closed tab"),
         ]),

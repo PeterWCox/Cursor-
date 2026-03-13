@@ -42,6 +42,9 @@ xcuserdata/
 out/
 dist/
 
+# App runtime data (per-workspace project.json, tasks.json)
+.cursormetro/
+
 # IDE / Editor
 .idea/
 *.swp

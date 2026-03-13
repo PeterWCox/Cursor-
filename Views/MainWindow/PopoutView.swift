@@ -64,6 +64,7 @@ private struct TerminalTabChip: View {
 /// Sidebar chip that observes its tab so only this chip re-renders when that tab's state changes (e.g. isRunning).
 private struct ObservedTabChip: View {
     @ObservedObject var tab: AgentTab
+    var linkedTaskStatus: LinkedTaskStatus? = nil
     let isSelected: Bool
     let showClose: Bool
     let onSelect: () -> Void
@@ -79,6 +80,7 @@ private struct ObservedTabChip: View {
             isRunning: tab.isRunning,
             latestTurnState: tab.turns.last?.displayState,
             hasPrompted: !tab.turns.isEmpty,
+            linkedTaskStatus: linkedTaskStatus,
             showClose: showClose,
             compact: false,
             onSelect: onSelect,
@@ -143,6 +145,49 @@ struct PopoutView: View {
             stopStreaming(for: tabToClose)
             tabManager.closeTab(tabToClose.id)
         }
+    }
+
+    /// Status of the task linked to this agent for sidebar display (open / processing / done).
+    private func linkedTaskStatus(for tab: AgentTab) -> LinkedTaskStatus? {
+        guard let taskID = tab.linkedTaskID else { return nil }
+        let tasks = ProjectTasksStorage.tasks(workspacePath: tab.workspacePath)
+        guard let task = tasks.first(where: { $0.id == taskID }) else { return nil }
+        if tab.isRunning { return .processing }
+        return task.completed ? .done : .open
+    }
+
+    private func tasksListContent(tasksPath: String) -> some View {
+        TasksListView(
+            workspacePath: tasksPath,
+            onSendToAgent: { prompt, taskID in
+                if let newTab = addNewAgentTab(initialPrompt: prompt, lastWorkspacePath: tasksPath) {
+                    if let taskID = taskID {
+                        newTab.linkedTaskID = taskID
+                    }
+                }
+                tabManager.hideTasksView()
+            },
+            onDismiss: { tabManager.hideTasksView() },
+            agentsForWorkspace: tabManager.tabs.filter { $0.workspacePath == tasksPath },
+            isTaskLinked: { taskID in
+                tabManager.tabs.contains(where: { $0.linkedTaskID == taskID })
+            },
+            onLinkTaskToAgent: { task, agent in
+                agent.linkedTaskID = task.id
+                tabManager.selectedTabID = agent.id
+                tabManager.selectedTerminalID = nil
+                tabManager.selectedTasksViewPath = nil
+                tabManager.selectedProjectPath = agent.workspacePath
+                if appState.isMainContentCollapsed {
+                    withAnimation(.easeInOut(duration: 0.2)) { appState.isMainContentCollapsed = false }
+                }
+            },
+            onUnlinkTask: { taskID in
+                tabManager.tabs.first(where: { $0.linkedTaskID == taskID })?.linkedTaskID = nil
+            }
+        )
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding(12)
     }
 
     /// Removes a project (all tabs for that workspace path) from the sidebar. Stops any running agents first.
@@ -222,20 +267,26 @@ struct PopoutView: View {
         closeTabConfirmationTabID = nil
     }
     /// Adds a new agent tab and resets model to Auto so each new window starts with the default.
-    private func addNewAgentTab(initialPrompt: String? = nil, lastWorkspacePath: String? = nil) {
+    /// If initialPrompt is provided, the prompt is submitted automatically (e.g. when sending a task from the Tasks list).
+    /// Returns the new tab so callers can set linkedTaskID etc.
+    @discardableResult
+    private func addNewAgentTab(initialPrompt: String? = nil, lastWorkspacePath: String? = nil) -> AgentTab? {
         let targetWorkspacePath = lastWorkspacePath ?? tabManager.activeProjectPath
-        guard let targetWorkspacePath else { return }
+        guard let targetWorkspacePath else { return nil }
         if appState.isMainContentCollapsed {
             withAnimation(.easeInOut(duration: 0.2)) { appState.isMainContentCollapsed = false }
         }
-        guard tabManager.addTab(initialPrompt: initialPrompt, workspacePath: targetWorkspacePath) != nil else { return }
+        guard let newTab = tabManager.addTab(initialPrompt: initialPrompt, workspacePath: targetWorkspacePath) else { return nil }
         selectedModel = AvailableModels.autoID
         // Refresh branch for the new tab so empty state shows correct branch immediately (avoids "No branch" on first paint).
-        guard let active = tabManager.activeTab else { return }
-        let (cur, list) = loadGitBranches(workspacePath: active.workspacePath)
+        let (cur, list) = loadGitBranches(workspacePath: newTab.workspacePath)
         currentBranch = cur
         gitBranches = list
-        active.currentBranch = cur
+        newTab.currentBranch = cur
+        if let prompt = initialPrompt, !prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            sendPrompt(tab: newTab)
+        }
+        return newTab
     }
 
     /// Adds a new terminal tab for the given or current project.
@@ -331,7 +382,9 @@ struct PopoutView: View {
                                         .opacity(tabManager.selectedTerminalID == tab.id ? 1 : 0)
                                         .allowsHitTesting(tabManager.selectedTerminalID == tab.id)
                                 }
-                                if tabManager.selectedTerminalID == nil {
+                                if tabManager.selectedTasksViewPath != nil, let tasksPath = tabManager.selectedTasksViewPath, tasksPath == selectedProjectPath {
+                                    tasksListContent(tasksPath: tasksPath)
+                                } else if tabManager.selectedTerminalID == nil {
                                     if let active = tabManager.activeTab {
                                         ObservedTabView(tab: active) { tab in
                                             agentAreaContent(tab: tab)
@@ -453,8 +506,8 @@ struct PopoutView: View {
                 .opacity(0)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
 
-                Button("Add Project") {
-                    addProject()
+                Button("Open in Browser") {
+                    openInBrowserOrShowSetURLSheet()
                 }
                 .keyboardShortcut("o", modifiers: .command)
                 .opacity(0)
@@ -516,14 +569,17 @@ struct PopoutView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
 
-                Button("Stop Agent") {
-                    if tabManager.activeTab?.isRunning == true {
-                        stopStreaming()
+                // Only claim Control+C when an agent tab is active so the terminal can receive it for SIGINT.
+                if tabManager.activeTerminalTab == nil {
+                    Button("Stop Agent") {
+                        if tabManager.activeTab?.isRunning == true {
+                            stopStreaming()
+                        }
                     }
+                    .keyboardShortcut("c", modifiers: .control)
+                    .opacity(0)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
-                .keyboardShortcut("c", modifiers: .control)
-                .opacity(0)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
 
                 Button("Toggle main window") {
                     withAnimation(.easeInOut(duration: 0.2)) { appState.isMainContentCollapsed.toggle() }
@@ -724,8 +780,22 @@ struct PopoutView: View {
                                     Button("New Terminal") {
                                         addNewTerminalTab(lastWorkspacePath: group.path)
                                     }
+                                    Button("View Tasks") {
+                                        if appState.isMainContentCollapsed {
+                                            withAnimation(.easeInOut(duration: 0.2)) { appState.isMainContentCollapsed = false }
+                                        }
+                                        tabManager.showTasksView(workspacePath: group.path)
+                                    }
                                     Button("Open in Cursor") {
                                         openProjectInCursor(group.path)
+                                    }
+                                    Button("Open in Browser") {
+                                        if let urlString = ProjectSettingsStorage.getDebugURL(workspacePath: group.path),
+                                           let url = URL(string: urlString) {
+                                            openURLInChrome(url)
+                                        } else {
+                                            openWorkspaceInFinder(workspacePath: group.path)
+                                        }
                                     }
                                     if gitHubRepositoryURL(workspacePath: group.path) != nil {
                                         Button("Open in GitHub") {
@@ -780,11 +850,13 @@ struct PopoutView: View {
                                 ForEach(group.tabs) { t in
                                     ObservedTabChip(
                                         tab: t,
+                                        linkedTaskStatus: linkedTaskStatus(for: t),
                                         isSelected: t.id == tabManager.selectedTabID,
                                         showClose: true,
                                         onSelect: {
                                             tabManager.selectedTabID = t.id
                                             tabManager.selectedTerminalID = nil
+                                            tabManager.selectedTasksViewPath = nil
                                             tabManager.selectedProjectPath = t.workspacePath
                                             if appState.isMainContentCollapsed {
                                                 withAnimation(.easeInOut(duration: 0.2)) { appState.isMainContentCollapsed = false }
@@ -801,6 +873,7 @@ struct PopoutView: View {
                                         onSelect: {
                                             tabManager.selectedTerminalID = term.id
                                             tabManager.selectedTabID = nil
+                                            tabManager.selectedTasksViewPath = nil
                                             tabManager.selectedProjectPath = term.workspacePath
                                             if appState.isMainContentCollapsed {
                                                 withAnimation(.easeInOut(duration: 0.2)) { appState.isMainContentCollapsed = false }
@@ -810,6 +883,36 @@ struct PopoutView: View {
                                     )
                                     .frame(maxWidth: .infinity, alignment: .leading)
                                 }
+                                let isTasksSelected = tabManager.selectedTasksViewPath == group.path
+                                Button {
+                                    tabManager.showTasksView(workspacePath: group.path)
+                                    if appState.isMainContentCollapsed {
+                                        withAnimation(.easeInOut(duration: 0.2)) { appState.isMainContentCollapsed = false }
+                                    }
+                                } label: {
+                                    HStack(spacing: 6) {
+                                        Image(systemName: "checklist")
+                                            .font(.system(size: 12))
+                                            .foregroundStyle(isTasksSelected ? CursorTheme.textPrimary : CursorTheme.textSecondary)
+                                        Text("Tasks")
+                                            .font(.system(size: 12, weight: isTasksSelected ? .semibold : .medium))
+                                            .foregroundStyle(isTasksSelected ? CursorTheme.textPrimary : CursorTheme.textSecondary)
+                                            .lineLimit(1)
+                                            .frame(maxWidth: .infinity, alignment: .leading)
+                                    }
+                                    .padding(.horizontal, 12)
+                                    .padding(.vertical, 7)
+                                    .background(
+                                        isTasksSelected ? CursorTheme.surfaceRaised : CursorTheme.surfaceMuted,
+                                        in: RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                    )
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                            .stroke(isTasksSelected ? CursorTheme.borderStrong : CursorTheme.border.opacity(0.6), lineWidth: 1)
+                                    )
+                                }
+                                .buttonStyle(.plain)
+                                .help("View tasks for this project")
                             }
                         }
                     }
@@ -1129,10 +1232,11 @@ struct PopoutView: View {
                     isDisabled: tab.isRunning,
                     workspacePath: tab.workspacePath,
                     onCommand: { sendInCurrentTab(prompt: $0.prompt, tab: tab) },
-                    // onDebug: { handleDebugAction() },
+                    onOpenInBrowser: { openInBrowserOrFolder(tab: tab) },
                     onAdd: {},
                     onCommandsChanged: { quickActionCommands = QuickActionStorage.commandsForWorkspace(workspacePath: tab.workspacePath) }
                 )
+                viewInBrowserMenu(tab: tab)
                 Spacer()
                 ComposerActionButtonsView(
                     showPinnedQuestionsPanel: $showPinnedQuestionsPanel,
@@ -1267,42 +1371,46 @@ struct PopoutView: View {
         )
     }
 
+    private func openInBrowserOrFolder(tab: AgentTab) {
+        if let urlString = ProjectSettingsStorage.getDebugURL(workspacePath: tab.workspacePath),
+           let url = URL(string: urlString) {
+            openURLInChrome(url)
+        } else {
+            openWorkspaceInFinder(workspacePath: tab.workspacePath)
+        }
+    }
+
+    /// Cmd+O: open in browser if URL is set, otherwise show Set debug URL sheet.
+    private func openInBrowserOrShowSetURLSheet() {
+        let path = currentWorkspacePath
+        if let urlString = ProjectSettingsStorage.getDebugURL(workspacePath: path),
+           let url = URL(string: urlString) {
+            openURLInChrome(url)
+        } else {
+            showSetDebugURLSheet = true
+        }
+    }
+
     private func viewInBrowserMenu(tab: AgentTab) -> some View {
         Menu {
-            Button("View in Browser") {
-                if let urlString = ProjectSettingsStorage.getDebugURL(workspacePath: tab.workspacePath),
-                   let url = URL(string: urlString) {
-                    NSWorkspace.shared.open(url)
-                } else {
-                    showSetDebugURLSheet = true
-                }
-            }
             Button("Set debug URL…") {
                 showSetDebugURLSheet = true
             }
-        } label: {
-            HStack(spacing: 8) {
-                Image(systemName: "globe")
-                Text("View in Browser")
-                    .lineLimit(1)
-                    .truncationMode(.middle)
+            Button("Run startup script") {
+                if let err = launchStartupScript(workspacePath: tab.workspacePath, preferredTerminal: preferredTerminalApp) {
+                    tab.errorMessage = err
+                } else {
+                    tab.errorMessage = nil
+                }
             }
-            .font(.system(size: 12, weight: .medium))
-            .foregroundStyle(CursorTheme.textPrimary)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(CursorTheme.surfaceMuted, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-            .overlay(
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .stroke(CursorTheme.border, lineWidth: 1)
-            )
+        } label: {
+            Image(systemName: "chevron.down.circle")
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(CursorTheme.textSecondary)
         }
         .menuStyle(.borderlessButton)
-        .foregroundColor(.white)
-        .colorScheme(.dark)
         .fixedSize(horizontal: true, vertical: false)
-        .help("Open project debug URL in browser, or set it if not configured")
+        .help("Set debug URL or run startup script")
     }
 
     private func sendStopButton(tab: AgentTab) -> some View {
@@ -1587,9 +1695,6 @@ struct PopoutView: View {
         let workspacePath = tab.workspacePath
         tab.followUpQueue.removeAll(where: { $0.id == item.id })
         addNewAgentTab(initialPrompt: prompt, lastWorkspacePath: workspacePath)
-        if let newTab = tabManager.activeTab {
-            sendPrompt(tab: newTab)
-        }
     }
 
     // MARK: - Streaming

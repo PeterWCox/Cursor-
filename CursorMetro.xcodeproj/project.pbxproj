@@ -29,6 +29,8 @@
 		A1000020 /* ScreenshotCardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000020 /* ScreenshotCardView.swift */; };
 		A1000035 /* ScreenshotPreviewModal.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000035 /* ScreenshotPreviewModal.swift */; };
 		A1000037 /* EmbeddedTerminalView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000037 /* EmbeddedTerminalView.swift */; };
+		A1000038 /* TasksListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000038 /* TasksListView.swift */; };
+		A1000039 /* ProjectTasksStorage.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000039 /* ProjectTasksStorage.swift */; };
 		A1000021 /* QuickActionCommand.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000021 /* QuickActionCommand.swift */; };
 		A1000022 /* QuickActionEditSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000022 /* QuickActionEditSheet.swift */; };
 		A1000023 /* KeyboardShortcutsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000023 /* KeyboardShortcutsView.swift */; };
@@ -70,6 +72,8 @@
 		A2000020 /* ScreenshotCardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenshotCardView.swift; sourceTree = "<group>"; };
 		A2000035 /* ScreenshotPreviewModal.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenshotPreviewModal.swift; sourceTree = "<group>"; };
 		A2000037 /* EmbeddedTerminalView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EmbeddedTerminalView.swift; sourceTree = "<group>"; };
+		A2000038 /* TasksListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TasksListView.swift; sourceTree = "<group>"; };
+		A2000039 /* ProjectTasksStorage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectTasksStorage.swift; sourceTree = "<group>"; };
 		A2000021 /* QuickActionCommand.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuickActionCommand.swift; sourceTree = "<group>"; };
 		A2000022 /* QuickActionEditSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuickActionEditSheet.swift; sourceTree = "<group>"; };
 		A2000023 /* KeyboardShortcutsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyboardShortcutsView.swift; sourceTree = "<group>"; };
@@ -153,6 +157,7 @@
 			children = (
 				A2000002 /* PopoutView.swift */,
 				A2000037 /* EmbeddedTerminalView.swift */,
+				A2000038 /* TasksListView.swift */,
 				A5000012 /* Sidebar */,
 				A5000013 /* TopBar */,
 				A5000014 /* Composer */,
@@ -254,6 +259,7 @@
 			children = (
 				A2000027 /* AppPreferences.swift */,
 				A2000028 /* ProjectSettingsStorage.swift */,
+				A2000039 /* ProjectTasksStorage.swift */,
 				A2000008 /* WorkspaceHelpers.swift */,
 				A2000032 /* TooltipModifier.swift */,
 			);
@@ -397,6 +403,8 @@
 				A1000033 /* MetroSpeechBubble.swift in Sources */,
 				A1000034 /* ActionButton.swift in Sources */,
 				A1000037 /* EmbeddedTerminalView.swift in Sources */,
+				A1000038 /* TasksListView.swift in Sources */,
+				A1000039 /* ProjectTasksStorage.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

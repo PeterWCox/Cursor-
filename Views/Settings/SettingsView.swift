@@ -12,6 +12,7 @@ struct SettingsView: View {
     @State private var editingCommand: QuickActionCommand?
     @State private var showAddSheet = false
     @State private var debugURL: String = ""
+    @State private var startupScript: String = ""
 
     var body: some View {
         Form {
@@ -21,10 +22,15 @@ struct SettingsView: View {
                     TextField("http://localhost:3000", text: $debugURL)
                         .textFieldStyle(.roundedBorder)
                 }
+                HStack {
+                    Text("Startup script:")
+                    TextField("e.g. scripts/start.sh or ./start.sh", text: $startupScript)
+                        .textFieldStyle(.roundedBorder)
+                }
             } header: {
                 Text("Project settings")
             } footer: {
-                Text("URL opened when you use \"View in Browser\". Applies to the workspace below. Saved in .cursor/project-settings.json.")
+                Text("View in Browser URL opens in Chrome when you use \"Open in Browser\". Startup script is run with bash from the workspace (use \"Run startup script\" in the composer menu). Saved in .cursormetro/project.json.")
             }
 
             Section {
@@ -119,14 +125,18 @@ struct SettingsView: View {
         .onAppear {
             reloadCommands()
             debugURL = ProjectSettingsStorage.getDebugURL(workspacePath: workspacePath) ?? ""
+            startupScript = ProjectSettingsStorage.getStartupScript(workspacePath: workspacePath) ?? ""
         }
         .onChange(of: workspacePath) { _, _ in
             reloadCommands()
             debugURL = ProjectSettingsStorage.getDebugURL(workspacePath: workspacePath) ?? ""
+            startupScript = ProjectSettingsStorage.getStartupScript(workspacePath: workspacePath) ?? ""
         }
         .onDisappear {
-            let trimmed = debugURL.trimmingCharacters(in: .whitespacesAndNewlines)
-            ProjectSettingsStorage.setDebugURL(workspacePath: workspacePath, trimmed.isEmpty ? nil : trimmed)
+            let trimmedUrl = debugURL.trimmingCharacters(in: .whitespacesAndNewlines)
+            ProjectSettingsStorage.setDebugURL(workspacePath: workspacePath, trimmedUrl.isEmpty ? nil : trimmedUrl)
+            let trimmedScript = startupScript.trimmingCharacters(in: .whitespacesAndNewlines)
+            ProjectSettingsStorage.setStartupScript(workspacePath: workspacePath, trimmedScript.isEmpty ? nil : trimmedScript)
         }
         // Add quick action sheet – commented out
         // .sheet(isPresented: $showAddSheet) {
