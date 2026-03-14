@@ -1,14 +1,6 @@
 # Cursor+
 
-<div style="background-color: #15161B; padding: 2.5rem 2.5rem; border-radius: 8px; margin: 0 -0.5rem 1.5rem -0.5rem;">
-
-![Cursor+](MarketingAssets/CursorPlusLogo.png)
-
-<p style="font-size: 1.5rem; font-weight: 700; color: #fafafa; line-height: 1.4; margin: 1rem 0 0.5rem 0;">Cursor’s AI agent in your menu bar. Code in your editor, get help without leaving the flow.</p>
-
-<p style="font-size: 1rem; font-weight: 400; color: #a1a1aa; line-height: 1.6; margin: 0;">A native macOS app that talks to the Cursor Agent CLI. One floating panel, multiple projects, real-time streaming—no need to switch into the full IDE when you just want to ask the agent something.</p>
-
-</div>
+**Cursor’s AI agent in your menu bar.** A native macOS app that talks to the Cursor Agent CLI—one floating panel, multiple projects, real-time streaming. No need to switch into the full IDE when you just want to ask the agent something.
 
 ---
 
@@ -47,36 +39,43 @@ Open the panel, pick a project, type a prompt, and watch responses stream in. Th
 
 ## Screenshots
 
-<img src="MarketingAssets/metro-dashboard-cursor-split.png" alt="Cursor+ full view with dashboard" style="flex: 1; min-width: 280px; max-width: 50%; border-radius: 6px;" />
-<img src="MarketingAssets/cursor-metro-sidebar.png" alt="Cursor+ collapsed sidebar" style="flex: 1; min-width: 280px; max-width: 50%; border-radius: 6px;" />
+| Full view | Collapsed sidebar |
+|-----------|-------------------|
+| ![Cursor+ full view with Cursor editor](MarketingAssets/metro-dashboard-cursor-split.png) | ![Cursor+ collapsed sidebar](MarketingAssets/cursor-metro-sidebar.png) |
 
-![Cursor+ Dashboard](MarketingAssets/metro-dashboard-screenshot.png)
-
----
-
-## What you need
-
-- **macOS** (recent version)
-- **Cursor CLI** (the `agent` tool)—used to create chats and stream responses
-- **Xcode** (from the Mac App Store) or **Xcode Command Line Tools**—to build the app
+![Cursor+ dashboard / preview](MarketingAssets/metro-dashboard-screenshot.png)
 
 ---
 
-## 1. Install the Cursor CLI
+## Requirements
 
-Cursor+ talks to Cursor through the **Cursor CLI**. Install it and log in once:
+Before building and running Cursor+ you need:
+
+| Requirement | Purpose |
+|-------------|---------|
+| **macOS** | Recent version (Ventura or later recommended). |
+| **Xcode** | From the [Mac App Store](https://apps.apple.com/app/xcode/id497799835). Required to compile the Swift app. Xcode Command Line Tools alone are not enough—you need the full Xcode app. |
+| **Cursor Agent CLI** | The `agent` binary used to create chats and stream responses. Cursor+ does not work without it. |
+
+---
+
+## Getting started
+
+### 1. Install the Cursor Agent CLI
+
+Cursor+ talks to Cursor through the **Cursor Agent CLI** (`agent`). Install it and log in once:
 
 ```bash
 curl https://cursor.com/install -fsSL | bash
 ```
 
-This usually installs the `agent` binary to `~/.local/bin/agent`. If that directory isn’t in your PATH, add it (e.g. in `~/.zshrc`):
+The installer typically puts the `agent` binary in `~/.local/bin`. If that directory isn’t in your PATH, add it (e.g. in `~/.zshrc`):
 
 ```bash
 export PATH="$HOME/.local/bin:$PATH"
 ```
 
-Then log in so the CLI can use your Cursor account:
+Log in so the CLI can use your Cursor account:
 
 ```bash
 agent login
@@ -84,29 +83,25 @@ agent login
 
 ---
 
-## 2. Build the app
+### 2. Build the app
 
-### Option A: Using Xcode
+**Option A — Xcode (simplest)**
 
 1. Open **`CursorMetro.xcodeproj`** in Xcode.
-2. Choose the **CursorMetro** scheme and your Mac as the run destination.
-3. Press **⌘B** to build, then **⌘R** to run.
+2. Select the **CursorMetro** scheme and your Mac as the run destination.
+3. **⌘B** to build, **⌘R** to run.
 
-The first run will create **Cursor+.app** in the project folder (or in the build products directory). You can drag **Cursor+.app** into **Applications** if you like.
+The first run creates **Cursor+.app** in the build products directory. You can drag it into **Applications** or run it from the project.
 
-### Option B: Using the terminal
+**Option B — Terminal**
 
-From the project folder:
-
-**Release build** (recommended for normal use):
+From the project root:
 
 ```bash
-./build-app.sh
+./build.sh
 ```
 
-This produces **Cursor+.app** in the project directory. Copy it to Applications or run it from there.
-
-**Debug build** (if you’re changing the code):
+This builds a Debug **Cursor+.app** at `build/Build/Products/Debug/Cursor+.app`. To build and launch in one step:
 
 ```bash
 ./build-and-run.sh
@@ -114,7 +109,7 @@ This produces **Cursor+.app** in the project directory. Copy it to Applications 
 
 ---
 
-## 3. Run Cursor+
+### 3. Run Cursor+
 
 - **First time:** Open **Cursor+.app** (from the project folder or from Applications). The Cursor+ icon appears in the **menu bar** (top right).
 - **Open the panel:** Click the menu bar icon. A floating panel opens with the composer and conversation.
@@ -123,7 +118,7 @@ This produces **Cursor+.app** in the project directory. Copy it to Applications 
 
 ---
 
-## 4. First steps
+### 4. First steps
 
 1. Click the menu bar icon to open the panel.
 2. If prompted, set your **workspace** (the project folder the agent will use) in Settings (⌘,) or via the workspace picker in the panel.
@@ -136,10 +131,10 @@ This produces **Cursor+.app** in the project directory. Copy it to Applications 
 
 | Issue | What to try |
 |--------|----------------|
-| **“Agent not found”** | Install the Cursor CLI (step 1) and ensure `~/.local/bin` is in your `PATH`. Restart the app after changing PATH. |
+| **“Agent not found”** | Install the Cursor Agent CLI (step 1) and ensure `~/.local/bin` is in your `PATH`. Restart Cursor+ after changing PATH. |
 | **“Try running ’agent login’”** | In Terminal, run `agent login` and complete the sign-in. Then try again in Cursor+. |
-| **Panel doesn’t open** | Check that Cursor+ is allowed in **System Settings → Privacy & Security → Accessibility** (needed for the floating panel). |
-| **Build fails in Xcode** | Ensure you’re on a recent Xcode and macOS. Open the project with **File → Packages → Reset Package Caches** if dependency errors persist. |
+| **Panel doesn’t open** | Allow Cursor+ in **System Settings → Privacy & Security → Accessibility** (required for the floating panel). |
+| **Build fails in Xcode** | Use a recent Xcode and macOS. Try **File → Packages → Reset Package Caches** if you see dependency errors. |
 
 ---
 
