@@ -40,3 +40,15 @@ Support Remote Agents
 
 Support Claude Code as well as Cursor.
 
+## Screenshots
+
+![Cursor Metro screenshot 1](docs/img1.jpeg)
+
+![Cursor Metro screenshot 2](docs/im2.jpg)
+
+![Cursor Metro screenshot 3](docs/img3.jpg)
+
+![Cursor Metro screenshot 4](docs/img4.jpg)
+
+![Cursor Metro screenshot 5](docs/img5.jpg)
+
