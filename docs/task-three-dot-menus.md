@@ -46,7 +46,7 @@ Common actions (shown when applicable):
 |-------|------|------------|
 | Delegate | `person` | In progress, no agent linked |
 | Edit | `pencil` | Task is editable |
-| Move to Backlog | `tray.full` | When viewing In Progress list |
+| Backlog | `tray.full` | When viewing In Progress list |
 | Move to In Progress | `arrow.right.circle` | When viewing Backlog list |
 | Complete | `checkmark.circle` | Always for incomplete tasks |
 
@@ -87,7 +87,7 @@ Separate row type; its own 3-dot and context menu:
 |-------|------------|
 | **Processing** | Stop only |
 | **Stopped / linked agent** | Open agent, Continue, Reset agent |
-| **In progress (no agent)** | Delegate, Edit, Move to Backlog, Complete, Delete |
+| **In progress (no agent)** | Delegate, Edit, Backlog, Complete, Delete |
 | **Backlog** | Delegate, Edit, Move to In Progress, Complete, Delete |
 | **Completed** | Mark as not done, Delete |
 | **Deleted (trash)** | Restore, Delete permanently |

@@ -131,6 +131,62 @@ private struct TasksTabBarView: View, Equatable {
     }
 }
 
+// MARK: - Collapsible grouping (Completed / Deleted time buckets)
+
+/// Reusable collapsible section: header (icon + title + count) with expand/collapse and a list of cards.
+private struct CollapsibleGroupingView<Content: View>: View {
+    @Environment(\.colorScheme) private var colorScheme
+    let title: String
+    let count: Int
+    let icon: String
+    let isExpanded: Bool
+    let onToggle: (Bool) -> Void
+    @ViewBuilder let content: () -> Content
+
+    init(
+        title: String,
+        count: Int,
+        icon: String = "calendar",
+        isExpanded: Bool,
+        onToggle: @escaping (Bool) -> Void,
+        @ViewBuilder content: @escaping () -> Content
+    ) {
+        self.title = title
+        self.count = count
+        self.icon = icon
+        self.isExpanded = isExpanded
+        self.onToggle = onToggle
+        self.content = content
+    }
+
+    var body: some View {
+        if count > 0 {
+            DisclosureGroup(isExpanded: Binding(get: { isExpanded }, set: { onToggle($0) })) {
+                VStack(alignment: .leading, spacing: CursorTheme.spacingListItems) {
+                    content()
+                }
+                .padding(.top, CursorTheme.gapSectionTitleToContent)
+            } label: {
+                HStack(spacing: CursorTheme.spaceXS) {
+                    Image(systemName: icon)
+                        .font(.system(size: CursorTheme.fontIconList))
+                        .foregroundStyle(CursorTheme.textSecondary(for: colorScheme))
+                    Text(title)
+                        .font(.system(size: CursorTheme.fontSecondary, weight: .semibold))
+                        .foregroundStyle(CursorTheme.textSecondary(for: colorScheme))
+                    Text("(\(count))")
+                        .font(.system(size: CursorTheme.fontCaption, weight: .medium))
+                        .foregroundStyle(CursorTheme.textTertiary(for: colorScheme))
+                }
+                .frame(height: CursorTheme.fontIconList)
+            }
+            .padding(.top, CursorTheme.spaceM)
+            .padding(.bottom, CursorTheme.gapBetweenSections)
+            .id("grouping-\(title)")
+        }
+    }
+}
+
 struct TasksListView: View {
     @Environment(\.colorScheme) private var colorScheme
     let workspacePath: String
@@ -169,9 +225,17 @@ struct TasksListView: View {
     @FocusState private var isTaskEditorFocused: Bool
     /// When true, show only completed tasks completed in the last 24 hours. When false, show all completed.
     @State private var showOnlyRecentCompleted: Bool = true
+    /// Section titles that are expanded in the Completed tab. Only "Today" is expanded by default for performance.
+    @State private var expandedCompletedSections: Set<String> = ["Today"]
+    /// Section titles that are expanded in the Deleted tab. Only "Today" is expanded by default for performance.
+    @State private var expandedDeletedSections: Set<String> = ["Today"]
     @State private var deletedTasksList: [ProjectTask] = []
-    /// URL for full-screen task screenshot preview (saved task screenshots). Same pattern as PopoutView.
-    @State private var taskScreenshotPreviewURL: URL? = nil
+    /// URLs and paths for full-screen task screenshot preview (saved task screenshots). When non-empty, modal shows images side by side.
+    @State private var taskScreenshotPreviewURLs: [URL] = []
+    @State private var taskScreenshotPreviewPaths: [String] = []
+    @State private var taskScreenshotPreviewIndex: Int = 0
+    /// Delete callback for the task whose screenshots are being previewed; used by modal X to remove a screenshot.
+    @State private var taskScreenshotPreviewOnDelete: ((String) -> Void)? = nil
     /// In-memory image for full-screen preview (new-task draft screenshots before save).
     @State private var taskScreenshotPreviewImage: NSImage? = nil
     /// Draft screenshots for the new task row (paste before commit). Shown with same thumbnail + preview as existing tasks.
@@ -291,24 +355,23 @@ struct TasksListView: View {
 
     private func commitNewTask() {
         let trimmed = newTaskDraft.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !trimmed.isEmpty {
-            recordHangEvent("tasks-commit-new-task", metadata: [
-                "contentLength": "\(trimmed.count)",
-                "screenshots": "\(newTaskDraftScreenshots.count)"
-            ])
-            let taskState: TaskState = (selectedTasksTab == .backlog) ? .backlog : .inProgress
-            _ = ProjectTasksStorage.addTask(
-                workspacePath: workspacePath,
-                content: trimmed,
-                screenshotImages: newTaskDraftScreenshots.map(\.image),
-                modelId: newTaskModelId,
-                taskState: taskState
-            )
-            reloadTasks()
-            newTaskDraft = ""
-            newTaskDraftScreenshots = []
-            newTaskModelId = AvailableModels.autoID
-        }
+        guard !trimmed.isEmpty else { return }
+        recordHangEvent("tasks-commit-new-task", metadata: [
+            "contentLength": "\(trimmed.count)",
+            "screenshots": "\(newTaskDraftScreenshots.count)"
+        ])
+        let taskState: TaskState = (selectedTasksTab == .backlog) ? .backlog : .inProgress
+        _ = ProjectTasksStorage.addTask(
+            workspacePath: workspacePath,
+            content: trimmed,
+            screenshotImages: newTaskDraftScreenshots.map(\.image),
+            modelId: newTaskModelId,
+            taskState: taskState
+        )
+        reloadTasks()
+        newTaskDraft = ""
+        newTaskDraftScreenshots = []
+        newTaskModelId = AvailableModels.autoID
         isAddingNewTask = false
         isNewTaskFieldFocused = false
     }
@@ -430,14 +493,28 @@ struct TasksListView: View {
         }
         .onDisappear { removeNewTaskPasteMonitor() }
         .overlay {
-            if taskScreenshotPreviewURL != nil || taskScreenshotPreviewImage != nil {
+            if !taskScreenshotPreviewURLs.isEmpty || taskScreenshotPreviewImage != nil {
                 ScreenshotPreviewModal(
-                    imageURL: taskScreenshotPreviewURL,
+                    imageURLs: taskScreenshotPreviewURLs.isEmpty ? nil : taskScreenshotPreviewURLs,
+                    initialIndex: taskScreenshotPreviewIndex,
                     image: taskScreenshotPreviewImage,
                     isPresented: Binding(
                         get: { true },
-                        set: { if !$0 { taskScreenshotPreviewURL = nil; taskScreenshotPreviewImage = nil } }
-                    )
+                        set: { if !$0 { taskScreenshotPreviewURLs = []; taskScreenshotPreviewPaths = []; taskScreenshotPreviewIndex = 0; taskScreenshotPreviewImage = nil; taskScreenshotPreviewOnDelete = nil } }
+                    ),
+                    onDeleteScreenshotAtIndex: taskScreenshotPreviewOnDelete != nil && !taskScreenshotPreviewPaths.isEmpty ? { index in
+                        guard index >= 0, index < taskScreenshotPreviewPaths.count else { return }
+                        let path = taskScreenshotPreviewPaths[index]
+                        taskScreenshotPreviewOnDelete?(path)
+                        taskScreenshotPreviewPaths.remove(at: index)
+                        taskScreenshotPreviewURLs.remove(at: index)
+                        if taskScreenshotPreviewURLs.isEmpty {
+                            taskScreenshotPreviewOnDelete = nil
+                            taskScreenshotPreviewIndex = 0
+                        } else {
+                            taskScreenshotPreviewIndex = min(taskScreenshotPreviewIndex, taskScreenshotPreviewURLs.count - 1)
+                        }
+                    } : nil
                 )
             }
         }
@@ -567,7 +644,7 @@ struct TasksListView: View {
                     let canMoveToBacklog = linkedStatuses[task.id] == nil || linkedStatuses[task.id] == AgentTaskState.none
                     taskRow(
                         task,
-                        stateTransitionLabel: canMoveToBacklog ? "Move to Backlog" : nil,
+                        stateTransitionLabel: canMoveToBacklog ? "Backlog" : nil,
                         stateTransitionIcon: "tray.full",
                         onStateTransition: canMoveToBacklog ? {
                             ProjectTasksStorage.updateTask(workspacePath: workspacePath, id: task.id, taskState: .backlog)
@@ -664,19 +741,38 @@ struct TasksListView: View {
         if snapshot.visibleCompletedTasks.isEmpty {
             emptyStateCompleted
         } else {
-            HStack(spacing: 8) {
-                Spacer(minLength: 0)
-                Button(action: { showOnlyRecentCompleted.toggle() }) {
-                    Text(showOnlyRecentCompleted ? "Show all" : "Last 24 hours")
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(CursorTheme.brandBlue)
+            VStack(alignment: .leading, spacing: 0) {
+                HStack(spacing: CursorTheme.spaceS) {
+                    Spacer(minLength: 0)
+                    Button(action: { showOnlyRecentCompleted.toggle() }) {
+                        Text(showOnlyRecentCompleted ? "Show all" : "Last 24 hours")
+                            .font(.system(size: CursorTheme.fontSmall, weight: .medium))
+                            .foregroundStyle(CursorTheme.brandBlue)
+                    }
+                    .buttonStyle(.plain)
                 }
-                .buttonStyle(.plain)
+                .padding(.bottom, CursorTheme.spaceS)
+                ForEach(Array(snapshot.completedGrouped.enumerated()), id: \.offset) { _, group in
+                    CollapsibleGroupingView(
+                        title: group.title,
+                        count: group.tasks.count,
+                        icon: "calendar",
+                        isExpanded: expandedCompletedSections.contains(group.title),
+                        onToggle: { expanded in
+                            var next = expandedCompletedSections
+                            if expanded { next.insert(group.title) } else { next.remove(group.title) }
+                            expandedCompletedSections = next
+                        },
+                        content: {
+                            ForEach(group.tasks) { task in
+                                taskRow(task)
+                            }
+                        }
+                    )
+                }
             }
-            .padding(.bottom, CursorTheme.spaceXS)
-            ForEach(Array(snapshot.completedGrouped.enumerated()), id: \.offset) { _, group in
-                timeBucketSection(title: group.title, tasks: group.tasks) { taskRow($0) }
-            }
+            .padding(.horizontal, CursorTheme.spaceM)
+            .padding(.top, CursorTheme.spaceS)
         }
     }
 
@@ -685,9 +781,28 @@ struct TasksListView: View {
         if snapshot.deletedTasks.isEmpty {
             emptyStateDeleted
         } else {
-            ForEach(Array(snapshot.deletedGrouped.enumerated()), id: \.offset) { _, group in
-                timeBucketSection(title: group.title, tasks: group.tasks) { deletedTaskRow($0) }
+            VStack(alignment: .leading, spacing: 0) {
+                ForEach(Array(snapshot.deletedGrouped.enumerated()), id: \.offset) { _, group in
+                    CollapsibleGroupingView(
+                        title: group.title,
+                        count: group.tasks.count,
+                        icon: "calendar",
+                        isExpanded: expandedDeletedSections.contains(group.title),
+                        onToggle: { expanded in
+                            var next = expandedDeletedSections
+                            if expanded { next.insert(group.title) } else { next.remove(group.title) }
+                            expandedDeletedSections = next
+                        },
+                        content: {
+                            ForEach(group.tasks) { task in
+                                deletedTaskRow(task)
+                            }
+                        }
+                    )
+                }
             }
+            .padding(.horizontal, CursorTheme.spaceM)
+            .padding(.top, CursorTheme.spaceS)
         }
     }
 
@@ -745,8 +860,11 @@ struct TasksListView: View {
                 ProjectTasksStorage.deleteTask(workspacePath: workspacePath, id: task.id)
                 reloadTasks()
             },
-            onPreviewScreenshot: { path in
-                taskScreenshotPreviewURL = ProjectTasksStorage.taskScreenshotFileURL(workspacePath: workspacePath, screenshotPath: path)
+            onPreviewScreenshot: { paths, selectedPath, onDelete in
+                taskScreenshotPreviewURLs = paths.map { ProjectTasksStorage.taskScreenshotFileURL(workspacePath: workspacePath, screenshotPath: $0) }
+                taskScreenshotPreviewPaths = paths
+                taskScreenshotPreviewIndex = paths.firstIndex(of: selectedPath) ?? 0
+                taskScreenshotPreviewOnDelete = onDelete
             },
             onDeleteScreenshot: !task.completed ? { path in
                 ProjectTasksStorage.removeTaskScreenshot(workspacePath: workspacePath, id: task.id, screenshotPath: path)
@@ -938,7 +1056,7 @@ struct TasksListView: View {
                         .padding(.horizontal, -4)
                         .padding(.vertical, -4)
                     if newTaskDraft.isEmpty {
-                        Text("Add task…")
+                        Text(newTaskDraftScreenshots.isEmpty ? "Add task…" : "Describe the task…")
                             .font(.system(size: 14, weight: .regular))
                             .foregroundStyle(CursorTheme.textTertiary(for: colorScheme))
                             .allowsHitTesting(false)
@@ -1028,85 +1146,33 @@ private struct TaskScreenshotThumbnailView: View {
     }
 }
 
-// MARK: - Inline screenshot strip: single thumb or pile + pill; prev/next when focused
+// MARK: - Inline screenshot strip: thumbnails shown side by side (each with delete X)
 
 private struct TaskScreenshotStripView: View {
-    @Environment(\.colorScheme) private var colorScheme
     let workspacePath: String
     let paths: [String]
-    var onPreview: (String) -> Void = { _ in }
+    /// Called with (all paths, selected path) so expanded preview can show side-by-side.
+    var onPreview: ([String], String) -> Void = { _, _ in }
     var onDelete: ((String) -> Void)? = nil
 
     private static let thumbSize: CGSize = CGSize(width: 36, height: 36)
-    @State private var selectedIndex: Int = 0
-    @State private var isHovered: Bool = false
-
-    private var currentPath: String? {
-        guard !paths.isEmpty, paths.indices.contains(selectedIndex) else { return nil }
-        return paths[selectedIndex]
-    }
 
     @ViewBuilder
     var body: some View {
         if paths.isEmpty {
             EmptyView()
-        } else if paths.count == 1, let path = paths.first {
-            TaskScreenshotThumbnailView(
-                workspacePath: workspacePath,
-                screenshotPath: path,
-                size: Self.thumbSize,
-                onTapPreview: { onPreview(path) },
-                onDelete: onDelete.map { cb in { cb(path) } }
-            )
         } else {
-            // Multiple: pile + pill, prev/next when hovered
-            HStack(spacing: 2) {
-                if isHovered {
-                    Button {
-                        selectedIndex = (selectedIndex - 1 + paths.count) % paths.count
-                    } label: {
-                        Image(systemName: "chevron.left")
-                            .font(.system(size: 10, weight: .semibold))
-                            .foregroundStyle(CursorTheme.textSecondary(for: colorScheme))
-                            .frame(width: 20, height: Self.thumbSize.height)
-                            .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                }
-                ZStack(alignment: .bottomTrailing) {
-                    if let path = currentPath {
-                        TaskScreenshotThumbnailView(
-                            workspacePath: workspacePath,
-                            screenshotPath: path,
-                            size: Self.thumbSize,
-                            onTapPreview: { onPreview(path) },
-                            onDelete: nil
-                        )
-                    }
-                    Text("\(paths.count)")
-                        .font(.system(size: CursorTheme.fontTiny, weight: .semibold))
-                        .foregroundStyle(CursorTheme.textPrimary(for: colorScheme))
-                        .padding(.horizontal, CursorTheme.paddingBadgeHorizontal)
-                        .padding(.vertical, CursorTheme.paddingBadgeVertical)
-                        .background(CursorTheme.surfaceRaised(for: colorScheme), in: Capsule())
-                        .overlay(Capsule().strokeBorder(CursorTheme.border(for: colorScheme), lineWidth: 1))
-                        .offset(x: 4, y: 4)
-                }
-                .onTapGesture { if let p = currentPath { onPreview(p) } }
-                if isHovered {
-                    Button {
-                        selectedIndex = (selectedIndex + 1) % paths.count
-                    } label: {
-                        Image(systemName: "chevron.right")
-                            .font(.system(size: 10, weight: .semibold))
-                            .foregroundStyle(CursorTheme.textSecondary(for: colorScheme))
-                            .frame(width: 20, height: Self.thumbSize.height)
-                            .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
+            HStack(alignment: .center, spacing: CursorTheme.spaceS) {
+                ForEach(Array(paths.enumerated()), id: \.offset) { _, path in
+                    TaskScreenshotThumbnailView(
+                        workspacePath: workspacePath,
+                        screenshotPath: path,
+                        size: Self.thumbSize,
+                        onTapPreview: { onPreview(paths, path) },
+                        onDelete: onDelete.map { cb in { cb(path) } }
+                    )
                 }
             }
-            .onHover { isHovered = $0 }
         }
     }
 }
@@ -1130,7 +1196,7 @@ private struct TaskRowView: View {
     let onSendToAgent: () -> Void
     var onModelChange: ((String) -> Void)? = nil
     let onDelete: () -> Void
-    var onPreviewScreenshot: ((String) -> Void)? = nil
+    var onPreviewScreenshot: (([String], String, ((String) -> Void)?) -> Void)? = nil
     var onDeleteScreenshot: ((String) -> Void)? = nil
     var stateTransitionLabel: String? = nil
     var stateTransitionIcon: String = "arrow.right.circle"
@@ -1162,7 +1228,7 @@ private struct TaskRowView: View {
                 TaskScreenshotStripView(
                     workspacePath: workspacePath,
                     paths: task.screenshotPaths,
-                    onPreview: { onPreviewScreenshot?($0) },
+                    onPreview: { paths, selected in onPreviewScreenshot?(paths, selected, onDeleteScreenshot) },
                     onDelete: onDeleteScreenshot
                 )
             }
@@ -1287,7 +1353,7 @@ private struct TaskRowView: View {
                                 onTap()
                             }
                         }
-                        .onTapGesture(count: 2) { if !task.completed, !isProcessing { onTap() } }
+                        .onTapGesture(count: 2) { if !task.completed { onTap() } }
                 }
                 if !task.completed, !models.isEmpty, !isEditing {
                     Group {

@@ -209,6 +209,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         statusItem.view = view
 
         panel = FloatingPanel()
+        if let expanded = PanelFrameStorage.loadExpandedSize() {
+            savedExpandedPanelWidth = expanded.width
+            savedExpandedPanelHeight = expanded.height
+        }
         let hostingView = NSHostingView(
             rootView: PopoutView(dismiss: { [weak self] in
                 self?.panel.orderOut(nil)
@@ -452,12 +456,19 @@ private enum PanelFrameStorage {
     static let yKey = "panelFrameY"
     static let widthKey = "panelFrameWidth"
     static let heightKey = "panelFrameHeight"
+    static let expandedWidthKey = "panelFrameExpandedWidth"
+    static let expandedHeightKey = "panelFrameExpandedHeight"
 
+    /// Saves the current frame. When the frame is expanded (width > collapsed + 20), also saves it as the preferred expanded size for next session.
     static func save(_ frame: NSRect) {
         UserDefaults.standard.set(frame.origin.x, forKey: xKey)
         UserDefaults.standard.set(frame.origin.y, forKey: yKey)
         UserDefaults.standard.set(frame.size.width, forKey: widthKey)
         UserDefaults.standard.set(frame.size.height, forKey: heightKey)
+        if frame.size.width > collapsedPanelWidth + 20 {
+            UserDefaults.standard.set(frame.size.width, forKey: expandedWidthKey)
+            UserDefaults.standard.set(frame.size.height, forKey: expandedHeightKey)
+        }
     }
 
     static func load() -> NSRect? {
@@ -468,21 +479,28 @@ private enum PanelFrameStorage {
         guard w > 0, h > 0 else { return nil }
         return NSRect(x: x, y: y, width: w, height: h)
     }
+
+    /// Returns (width, height) for the preferred expanded size from last session, or nil if not set.
+    static func loadExpandedSize() -> (width: CGFloat, height: CGFloat)? {
+        let w = UserDefaults.standard.double(forKey: expandedWidthKey)
+        let h = UserDefaults.standard.double(forKey: expandedHeightKey)
+        guard w >= CGFloat(minExpandedPanelWidth), w <= 1400, h >= 400, h <= 1600 else { return nil }
+        return (CGFloat(w), CGFloat(h))
+    }
 }
 
 class FloatingPanel: NSPanel {
     private static let defaultWidth: CGFloat = 720
     private static let defaultHeight: CGFloat = 960
 
+    /// Returns true if we have valid saved dimensions. Caller should then restore and use ensurePanelIsVisibleOnScreen() to clamp if off-screen.
     static func hasSavedFrame() -> Bool {
         guard let frame = PanelFrameStorage.load() else { return false }
         let minW: CGFloat = collapsedPanelWidth
         let maxW: CGFloat = 1400
         let minH: CGFloat = 400, maxH: CGFloat = 1600
-        guard frame.size.width >= minW, frame.size.width <= maxW,
-              frame.size.height >= minH, frame.size.height <= maxH else { return false }
-        let onScreen = NSScreen.screens.contains { $0.frame.intersects(frame) }
-        return onScreen
+        return frame.size.width >= minW && frame.size.width <= maxW
+            && frame.size.height >= minH && frame.size.height <= maxH
     }
 
     static func restoreSavedFrame(to panel: NSPanel) {

@@ -1219,13 +1219,10 @@ struct PopoutView: View {
         .padding(.vertical, CursorTheme.paddingHeaderVertical)
     }
 
-    /// Header area: title row plus optional expanded agent prompt (so prompt shows as part of header, not a separate body).
+    /// Header area: title row (agent prompt expands in place by wrapping, no separate card).
     @ViewBuilder
     private var mainColumnHeaderArea: some View {
         mainColumnTitleRow
-        if let tab = tabManager.activeTab, expandedPromptTabID == tab.id {
-            agentExpandedPromptInHeader(tab: tab)
-        }
     }
 
     @ViewBuilder
@@ -1238,15 +1235,6 @@ struct PopoutView: View {
             agentTitleContent(tab: tab, expandedPromptTabID: $expandedPromptTabID)
         } else {
             EmptyView()
-        }
-    }
-
-    private func agentExpandedPromptInHeader(tab: AgentTab) -> some View {
-        let fullPrompt = (tab.turns.first?.userPrompt ?? tab.prompt).trimmingCharacters(in: .whitespacesAndNewlines)
-        return Group {
-            if !fullPrompt.isEmpty {
-                fullPromptAccordionContent(fullPrompt: fullPrompt, workspacePath: tab.workspacePath)
-            }
         }
     }
 
@@ -1308,16 +1296,19 @@ struct PopoutView: View {
         let hasExpandablePrompt = !fullPrompt.isEmpty
         let isExpanded = expandedPromptTabID.wrappedValue == tab.id
         let displayTitle = (isExpanded && hasExpandablePrompt) ? userPromptDisplayText(from: fullPrompt) : tab.title
-        return HStack(alignment: .center, spacing: CursorTheme.spaceM) {
+        return HStack(alignment: .top, spacing: CursorTheme.spaceM) {
             agentStatusIcon(tab: tab, status: status)
                 .frame(width: 32, height: 32)
             VStack(alignment: .leading, spacing: 2) {
-                HStack(alignment: .center, spacing: CursorTheme.spaceXS) {
+                HStack(alignment: .top, spacing: CursorTheme.spaceXS) {
                     Text(displayTitle)
                         .font(.system(size: CursorTheme.fontTitle, weight: .semibold))
                         .foregroundStyle(CursorTheme.textPrimary(for: colorScheme))
-                        .lineLimit(1)
+                        .lineLimit(isExpanded ? nil : 1)
                         .truncationMode(.tail)
+                        .multilineTextAlignment(.leading)
+                        .frame(minWidth: 0, maxWidth: .infinity, alignment: .leading)
+                        .fixedSize(horizontal: false, vertical: true)
                         .textSelection(.enabled)
                     if hasExpandablePrompt {
                         Button(action: {
@@ -1524,26 +1515,14 @@ struct PopoutView: View {
             }
             .frame(maxHeight: .infinity)
 
-            Button(action: addProject) {
-                HStack(spacing: 6) {
-                    Image(systemName: "folder.badge.plus")
-                        .font(.system(size: 12))
-                        .foregroundStyle(CursorTheme.textSecondary(for: colorScheme))
-                    Text("Add Project")
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(CursorTheme.textSecondary(for: colorScheme))
-                        .lineLimit(1)
-                }
-                .frame(maxWidth: .infinity, alignment: .center)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 7)
-                .background(CursorTheme.surfaceMuted(for: colorScheme), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .stroke(CursorTheme.border(for: colorScheme).opacity(0.6), lineWidth: 1)
-                )
-            }
-            .buttonStyle(.plain)
+            ActionButton(
+                title: "Add Project",
+                icon: "plus.circle.fill",
+                action: addProject,
+                help: "Add a project",
+                style: .primary
+            )
+            .frame(maxWidth: .infinity)
         }
         .padding(.horizontal, Self.sidebarContentPadding)
         .frame(width: sidebarWidth)
@@ -1576,19 +1555,13 @@ struct PopoutView: View {
                         .frame(maxWidth: 320)
                 }
 
-                Button(action: addProject) {
-                    HStack(spacing: 10) {
-                        Image(systemName: "folder.badge.plus")
-                            .font(.system(size: 16, weight: .semibold))
-                        Text("Add Project")
-                            .font(.system(size: 16, weight: .semibold))
-                    }
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, 24)
-                    .padding(.vertical, 14)
-                    .background(CursorTheme.brandBlue, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-                }
-                .buttonStyle(.plain)
+                ActionButton(
+                    title: "Add Project",
+                    icon: "plus.circle.fill",
+                    action: addProject,
+                    help: "Add a project",
+                    style: .primary
+                )
             }
             .padding(32)
             Spacer(minLength: 40)
@@ -1617,27 +1590,6 @@ struct PopoutView: View {
             }
         }
         return ("Ready", false, false, false, false)
-    }
-
-    private func fullPromptAccordionContent(fullPrompt: String, workspacePath: String) -> some View {
-        let displayText = userPromptDisplayText(from: fullPrompt)
-        return VStack(alignment: .leading, spacing: 0) {
-            Text(displayText)
-                .font(.system(size: CursorTheme.fontSecondary, weight: .regular))
-                .foregroundStyle(CursorTheme.textPrimary(for: colorScheme))
-                .multilineTextAlignment(.leading)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .textSelection(.enabled)
-                .padding(CursorTheme.paddingCard)
-        }
-        .frame(minWidth: 0, maxWidth: .infinity, alignment: .leading)
-        .background(CursorTheme.surfaceMuted(for: colorScheme), in: RoundedRectangle(cornerRadius: CursorTheme.radiusCard, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: CursorTheme.radiusCard, style: .continuous)
-                .stroke(CursorTheme.border(for: colorScheme), lineWidth: 1)
-        )
-        .padding(.horizontal, CursorTheme.paddingHeaderHorizontal)
-        .padding(.bottom, CursorTheme.spaceS)
     }
 
     @ViewBuilder
@@ -1831,56 +1783,77 @@ struct PopoutView: View {
                 )
             }
 
-            ForEach(Array(attachedPaths.enumerated()), id: \.offset) { _, path in
-                ScreenshotCardView(
-                    path: path,
-                    workspacePath: tab.workspacePath,
-                    onDelete: { deleteScreenshot(path: path, tab: tab) },
-                    onTapPreview: { screenshotPreviewURL = screenshotFileURL(path: path, workspacePath: tab.workspacePath) }
-                )
-            }
-
-            HStack(alignment: .bottom, spacing: 12) {
-                ZStack(alignment: .topLeading) {
-                    SubmittableTextEditor(
-                        text: Binding(
-                            get: { tab.prompt },
-                            set: { newValue in
-                                tab.prompt = newValue
-                                tab.hasAttachedScreenshot = !screenshotPaths(from: tab.prompt).isEmpty
-                            }
-                        ),
-                        isDisabled: false,
-                        onSubmit: { submitOrQueuePrompt(tab: tab) },
-                        onPasteImage: { pasteScreenshot(tab: tab) },
-                        onHeightChange: { newHeight in
-                            composerTextHeight = newHeight
-                        },
-                        onFocusRequested: { focus, isFirstResponder in
-                            focusPromptInput = focus
-                            isPromptFirstResponder = isFirstResponder
-                        },
-                        colorScheme: colorScheme
-                    )
-                    .frame(height: composerHeight)
-
-                    if userPromptDisplayText(from: tab.prompt).isEmpty && screenshotPaths(from: tab.prompt).isEmpty {
-                        Text("Send message and/or ⌘V to paste one or more screenshots from clipboard. Press Enter to submit and ⇧Enter for new line.")
-                            .font(.system(size: 13, weight: .regular, design: .monospaced))
-                            .foregroundStyle(CursorTheme.textTertiary(for: colorScheme))
-                            .padding(.leading, 4)
-                            .padding(.top, 6)
-                            .padding(.trailing, 8)
-                            .allowsHitTesting(false)
+            VStack(alignment: .leading, spacing: 0) {
+                if !attachedPaths.isEmpty {
+                    VStack(alignment: .leading, spacing: CursorTheme.spaceS) {
+                        ForEach(Array(attachedPaths.enumerated()), id: \.offset) { _, path in
+                            ScreenshotCardView(
+                                path: path,
+                                workspacePath: tab.workspacePath,
+                                onDelete: { deleteScreenshot(path: path, tab: tab) },
+                                onTapPreview: { screenshotPreviewURL = screenshotFileURL(path: path, workspacePath: tab.workspacePath) }
+                            )
+                        }
                     }
+                    .padding(.horizontal, 12)
+                    .padding(.top, 8)
+                    .padding(.bottom, 4)
+                    Rectangle()
+                        .fill(CursorTheme.border(for: colorScheme))
+                        .frame(height: 1)
+                        .padding(.horizontal, 12)
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
 
-                sendStopButton(tab: tab)
-                    .padding(.bottom, 2)
+                if tab.isRunning && !tab.followUpQueue.isEmpty {
+                    queuedSectionContent(tab: tab)
+                    Rectangle()
+                        .fill(CursorTheme.border(for: colorScheme))
+                        .frame(height: 1)
+                        .padding(.horizontal, 12)
+                }
+
+                HStack(alignment: .bottom, spacing: 12) {
+                    ZStack(alignment: .topLeading) {
+                        SubmittableTextEditor(
+                            text: Binding(
+                                get: { tab.prompt },
+                                set: { newValue in
+                                    tab.prompt = newValue
+                                    tab.hasAttachedScreenshot = !screenshotPaths(from: tab.prompt).isEmpty
+                                }
+                            ),
+                            isDisabled: false,
+                            onSubmit: { submitOrQueuePrompt(tab: tab) },
+                            onPasteImage: { pasteScreenshot(tab: tab) },
+                            onHeightChange: { newHeight in
+                                composerTextHeight = newHeight
+                            },
+                            onFocusRequested: { focus, isFirstResponder in
+                                focusPromptInput = focus
+                                isPromptFirstResponder = isFirstResponder
+                            },
+                            colorScheme: colorScheme
+                        )
+                        .frame(height: composerHeight)
+
+                        if userPromptDisplayText(from: tab.prompt).isEmpty && screenshotPaths(from: tab.prompt).isEmpty {
+                            Text(placeholderText(whenRunning: tab.isRunning))
+                                .font(.system(size: 13, weight: .regular, design: .monospaced))
+                                .foregroundStyle(CursorTheme.textTertiary(for: colorScheme))
+                                .padding(.leading, 4)
+                                .padding(.top, 6)
+                                .padding(.trailing, 8)
+                                .allowsHitTesting(false)
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+
+                    sendStopButton(tab: tab)
+                        .padding(.bottom, 2)
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
             .background(CursorTheme.editor, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
             .overlay(
                 RoundedRectangle(cornerRadius: 16, style: .continuous)
@@ -1982,7 +1955,7 @@ struct PopoutView: View {
     @ViewBuilder
     private func sendStopButton(tab: AgentTab) -> some View {
         if tab.isRunning {
-            Button(action: { interruptAndSend(tab: tab) }) {
+            Button(action: { stopStreaming(for: tab) }) {
                 Image(systemName: "stop.fill")
                     .font(.system(size: 12, weight: .bold))
                     .foregroundStyle(.white)
@@ -1994,7 +1967,7 @@ struct PopoutView: View {
                     )
             }
             .buttonStyle(.plain)
-            .help("Stop the agent and send the current message")
+            .help("Stop the agent")
         } else {
             Button(action: { submitOrQueuePrompt(tab: tab) }) {
                 Image(systemName: "arrow.up")
@@ -2040,24 +2013,88 @@ struct PopoutView: View {
         !tab.prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
-    /// Submit the current prompt: send immediately if idle, or interrupt (stop and send) if agent is running.
+    private func placeholderText(whenRunning isRunning: Bool) -> String {
+        if isRunning {
+            return "Press Enter to queue message (sends when agent finishes). ⇧Enter for new line."
+        }
+        return "Send message and/or ⌘V to paste one or more screenshots from clipboard. Press Enter to submit and ⇧Enter for new line."
+    }
+
+    private func queuedCountLabel(_ count: Int) -> String {
+        count == 1 ? "1 message queued" : "\(count) messages queued"
+    }
+
+    private func queuedSectionHeaderLabel(_ count: Int) -> String {
+        count == 1 ? "1 Queued" : "\(count) Queued"
+    }
+
+    @ViewBuilder
+    private func queuedSectionContent(tab: AgentTab) -> some View {
+        VStack(alignment: .leading, spacing: CursorTheme.spaceS) {
+            Text(queuedSectionHeaderLabel(tab.followUpQueue.count))
+                .font(.system(size: CursorTheme.fontSecondary, weight: .medium))
+                .foregroundStyle(CursorTheme.textSecondary(for: colorScheme))
+
+            ForEach(Array(tab.followUpQueue.enumerated()), id: \.element.id) { index, item in
+                HStack(alignment: .center, spacing: CursorTheme.spaceS) {
+                    Text(userPromptDisplayText(from: item.text))
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                        .font(.system(size: CursorTheme.fontBodySmall, weight: .regular, design: .monospaced))
+                        .foregroundStyle(CursorTheme.textPrimary(for: colorScheme))
+                        .frame(maxWidth: .infinity, alignment: .leading)
+
+                    Button(action: { removeQueuedFollowUp(tab: tab, at: index) }) {
+                        Image(systemName: "trash")
+                            .font(.system(size: CursorTheme.fontIconList))
+                            .foregroundStyle(CursorTheme.textSecondary(for: colorScheme))
+                    }
+                    .buttonStyle(.plain)
+                    .help("Remove from queue")
+                }
+                .padding(.horizontal, CursorTheme.spaceM)
+                .padding(.vertical, CursorTheme.spaceS)
+                .background(CursorTheme.surfaceMuted(for: colorScheme), in: RoundedRectangle(cornerRadius: CursorTheme.spaceXS, style: .continuous))
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.top, 8)
+        .padding(.bottom, 8)
+    }
+
+    /// Remove a queued follow-up at the given index.
+    private func removeQueuedFollowUp(tab: AgentTab, at index: Int) {
+        guard index >= 0, index < tab.followUpQueue.count else { return }
+        tab.followUpQueue.remove(at: index)
+    }
+
+    /// Submit the current prompt: send immediately if idle, or queue to send when agent finishes if running.
     private func submitOrQueuePrompt(tab: AgentTab) {
         let trimmed = tab.prompt.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
         if tab.isRunning {
-            interruptAndSend(tab: tab)
+            queueFollowUp(tab: tab)
             return
         }
         sendPrompt(tab: tab)
     }
 
-    /// Stop the agent and send the current message (if any). Replaces staging messages while running.
-    private func interruptAndSend(tab: AgentTab) {
-        stopStreaming(for: tab)
+    /// Queue the current prompt to be sent as soon as the agent finishes its current response.
+    private func queueFollowUp(tab: AgentTab) {
         let trimmed = tab.prompt.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !trimmed.isEmpty {
-            sendPrompt(tab: tab)
-        }
+        guard !trimmed.isEmpty else { return }
+        tab.followUpQueue.append(QueuedFollowUp(text: tab.prompt))
+        tab.prompt = ""
+        tab.hasAttachedScreenshot = false
+    }
+
+    /// Process the next queued follow-up: set prompt and send. Called from finishStreaming when queue is non-empty.
+    private func processNextQueuedFollowUp(tab: AgentTab) {
+        guard let first = tab.followUpQueue.first else { return }
+        tab.followUpQueue.removeFirst()
+        tab.prompt = first.text
+        tab.hasAttachedScreenshot = !screenshotPaths(from: first.text).isEmpty
+        sendPrompt(tab: tab)
     }
 
     private static let compressPrompt = "Summarize our entire conversation so far into a single concise summary that preserves key context, decisions, and next steps. Reply with only that summary, no other text."
@@ -2339,6 +2376,9 @@ struct PopoutView: View {
         currentTab.activeRunID = nil
         currentTab.activeTurnID = nil
         requestAutoScroll(for: currentTab, force: true)
+        if !currentTab.followUpQueue.isEmpty {
+            processNextQueuedFollowUp(tab: currentTab)
+        }
     }
 
     private func appendThinkingText(_ incoming: String, to turnID: UUID, in tab: AgentTab) {
