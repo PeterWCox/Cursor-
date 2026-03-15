@@ -91,6 +91,11 @@ private struct TabSidebarGroup {
     let terminalTabs: [TerminalTab]
 }
 
+private struct GitBranchSnapshot: Equatable {
+    let current: String
+    let branches: [String]
+}
+
 /// Wrapper that observes a single tab so only this subtree re-renders when that tab streams.
 /// Use for the active-tab content area so background tabs don't invalidate the whole window.
 private struct ObservedTabView<Content: View>: View {
@@ -256,6 +261,7 @@ struct PopoutView: View {
     @State private var devFolders: [URL] = []
     @State private var gitBranches: [String] = []
     @State private var currentBranch: String = ""
+    @State private var gitBranchSnapshotsByWorkspace: [String: GitBranchSnapshot] = [:]
     @State private var quickActionCommands: [QuickActionCommand] = []
     @State private var composerTextHeight: CGFloat = 24
     @State private var showCreateDebugScriptSheet: Bool = false
@@ -699,11 +705,8 @@ struct PopoutView: View {
         workspacePath = trimmedPath
         appState.workspacePath = trimmedPath
 
-        let (cur, list) = loadGitBranches(workspacePath: trimmedPath)
-        currentBranch = cur
-        gitBranches = list
         tabManager.activeTab?.errorMessage = nil
-        tabManager.activeTab?.currentBranch = cur
+        refreshGitState(for: trimmedPath, force: true)
     }
 
     private func openProjectInCursor(_ path: String) {
@@ -800,10 +803,8 @@ struct PopoutView: View {
     private func runGitInit(workspacePath path: String) {
         guard gitInit(workspacePath: path) == nil else { return }
         if path == tabManager.activeProjectPath, let active = tabManager.activeTab {
-            let (cur, list) = loadGitBranches(workspacePath: path)
-            currentBranch = cur
-            gitBranches = list
-            active.currentBranch = cur
+            active.currentBranch = ""
+            refreshGitState(for: path, force: true)
         }
     }
 
@@ -827,11 +828,13 @@ struct PopoutView: View {
             withAnimation(.easeInOut(duration: 0.2)) { appState.isMainContentCollapsed = false }
         }
         guard let newTab = tabManager.addTab(initialPrompt: initialPrompt, workspacePath: targetWorkspacePath, modelId: modelId, select: select) else { return nil }
-        // Refresh branch for the new tab so empty state shows correct branch immediately (avoids "No branch" on first paint).
-        let (cur, list) = loadGitBranches(workspacePath: newTab.workspacePath)
-        currentBranch = cur
-        gitBranches = list
-        newTab.currentBranch = cur
+        if let snapshot = gitBranchSnapshotsByWorkspace[newTab.workspacePath] {
+            currentBranch = snapshot.current
+            gitBranches = snapshot.branches
+            newTab.currentBranch = snapshot.current
+        } else {
+            refreshGitState(for: newTab.workspacePath)
+        }
         if let prompt = initialPrompt, !prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             sendPrompt(tab: newTab)
         }
@@ -865,6 +868,45 @@ struct PopoutView: View {
 
     private var apiUsagePercent: Int {
         min(100, (messagesSentForUsage * 100) / AppLimits.includedAPIQuota)
+    }
+
+    private func refreshGitState(for workspacePath: String, force: Bool = false) {
+        let normalizedPath = workspacePath.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalizedPath.isEmpty else {
+            currentBranch = ""
+            gitBranches = []
+            return
+        }
+
+        if let cached = gitBranchSnapshotsByWorkspace[normalizedPath] {
+            currentBranch = cached.current
+            gitBranches = cached.branches
+            if let active = tabManager.activeTab, active.workspacePath == normalizedPath {
+                active.currentBranch = cached.current
+            }
+            if !force {
+                return
+            }
+        } else {
+            if let active = tabManager.activeTab, active.workspacePath == normalizedPath {
+                currentBranch = active.currentBranch
+            } else {
+                currentBranch = ""
+            }
+            gitBranches = []
+        }
+
+        Task.detached(priority: .utility) {
+            let result = loadGitBranches(workspacePath: normalizedPath)
+            let snapshot = GitBranchSnapshot(current: result.current, branches: result.branches)
+            await MainActor.run {
+                gitBranchSnapshotsByWorkspace[normalizedPath] = snapshot
+                guard currentWorkspacePath == normalizedPath else { return }
+                currentBranch = snapshot.current
+                gitBranches = snapshot.branches
+                tabManager.activeTab?.currentBranch = snapshot.current
+            }
+        }
     }
 
     private let sidebarWidth: CGFloat = 250
@@ -1034,11 +1076,7 @@ struct PopoutView: View {
             devFolders = loadDevFolders(rootPath: projectsRootPath)
             tabManager.setProjectsFromPaths(devFolders.map(\.path))
             quickActionCommands = QuickActionStorage.commandsForWorkspace(workspacePath: currentWorkspacePath)
-            let path = currentWorkspacePath
-            let (cur, list) = loadGitBranches(workspacePath: path)
-            currentBranch = cur
-            gitBranches = list
-            tabManager.activeTab?.currentBranch = cur
+            refreshGitState(for: currentWorkspacePath)
             updateHangDiagnosticsSnapshot()
         }
         .onChange(of: workspacePath) { _, _ in
@@ -1055,20 +1093,13 @@ struct PopoutView: View {
             updateHangDiagnosticsSnapshot()
         }
         .onChange(of: tabManager.selectedTabID) { _, _ in
-            let path = currentWorkspacePath
-            let (cur, list) = loadGitBranches(workspacePath: path)
-            currentBranch = cur
-            gitBranches = list
-            tabManager.activeTab?.currentBranch = cur
+            refreshGitState(for: currentWorkspacePath)
             updateHangDiagnosticsSnapshot()
         }
         .onChange(of: tabManager.selectedProjectPath) { _, _ in
             let path = currentWorkspacePath
             quickActionCommands = QuickActionStorage.commandsForWorkspace(workspacePath: path)
-            let (cur, list) = loadGitBranches(workspacePath: path)
-            currentBranch = cur
-            gitBranches = list
-            tabManager.activeTab?.currentBranch = cur
+            refreshGitState(for: path)
             updateHangDiagnosticsSnapshot()
         }
         .onChange(of: tabManager.selectedTasksViewPath) { _, _ in
@@ -1851,37 +1882,25 @@ struct PopoutView: View {
                             if let err = gitCheckout(branch: branch, workspacePath: tab.workspacePath) {
                                 tab.errorMessage = err
                             } else {
-                                let (cur, list) = loadGitBranches(workspacePath: tab.workspacePath)
-                                currentBranch = cur
-                                gitBranches = list
-                                tab.currentBranch = cur
                                 tab.errorMessage = nil
+                                refreshGitState(for: tab.workspacePath, force: true)
                             }
                         }
                     },
                     onOpenMenu: {
-                        let (cur, list) = loadGitBranches(workspacePath: tab.workspacePath)
-                        currentBranch = cur
-                        gitBranches = list
-                        tab.currentBranch = cur
+                        refreshGitState(for: tab.workspacePath, force: true)
                     },
                     onCreateBranch: { name in
                         if let err = gitCreateBranch(name: name, workspacePath: tab.workspacePath) {
                             return err
                         }
-                        let (cur, list) = loadGitBranches(workspacePath: tab.workspacePath)
-                        currentBranch = cur
-                        gitBranches = list
-                        tab.currentBranch = cur
                         tab.errorMessage = nil
+                        refreshGitState(for: tab.workspacePath, force: true)
                         return nil
                     }
                 )
                 .onChange(of: tab.workspacePath) { _, _ in
-                    let (cur, list) = loadGitBranches(workspacePath: tab.workspacePath)
-                    currentBranch = cur
-                    gitBranches = list
-                    tab.currentBranch = cur
+                    refreshGitState(for: tab.workspacePath)
                 }
 
                 Spacer()
