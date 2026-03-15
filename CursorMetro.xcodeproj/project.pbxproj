@@ -31,7 +31,6 @@
 		A1000043 /* ScreenshotThumbnailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000043 /* ScreenshotThumbnailView.swift */; };
 		A1000037 /* EmbeddedTerminalView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000037 /* EmbeddedTerminalView.swift */; };
 		A1000038 /* TasksListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000038 /* TasksListView.swift */; };
-		A1000044 /* DashboardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000044 /* DashboardView.swift */; };
 		A1000039 /* ProjectTasksStorage.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000039 /* ProjectTasksStorage.swift */; };
 		A1000021 /* QuickActionCommand.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000021 /* QuickActionCommand.swift */; };
 		A1000022 /* QuickActionEditSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000022 /* QuickActionEditSheet.swift */; };
@@ -48,13 +47,33 @@
 		A1000040 /* ActionButton.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000040 /* ActionButton.swift */; };
 		A1000041 /* ThreeDotMenuButton.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000041 /* ThreeDotMenuButton.swift */; };
 		A1000042 /* IconButton.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000042 /* IconButton.swift */; };
+		A1000046 /* ProjectTasksStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000045 /* ProjectTasksStore.swift */; };
+		A1000047 /* ProjectSettingsStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000046 /* ProjectSettingsStore.swift */; };
+		A1000048 /* AgentSessionStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000047 /* AgentSessionStore.swift */; };
+		A1000049 /* TasksListStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000048 /* TasksListStore.swift */; };
+		A1000050 /* ImageAssetCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000049 /* ImageAssetCache.swift */; };
+		A1000051 /* TestSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000050 /* TestSupport.swift */; };
+		A1000052 /* TimeBucketTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000051 /* TimeBucketTests.swift */; };
+		A1000053 /* ProjectSettingsStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000052 /* ProjectSettingsStoreTests.swift */; };
+		A1000054 /* TasksListStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000053 /* TasksListStoreTests.swift */; };
 		A1000024 /* Textual in Frameworks */ = {isa = PBXBuildFile; productRef = A8000003 /* Textual */; };
 		A1000036 /* SwiftTerm in Frameworks */ = {isa = PBXBuildFile; productRef = A8000005 /* SwiftTerm */; };
 		A1000045 /* Inject in Frameworks */ = {isa = PBXBuildFile; productRef = A8000007 /* Inject */; };
 /* End PBXBuildFile section */
 
+/* Begin PBXContainerItemProxy section */
+		A1100001 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = A8000001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = A6000001;
+			remoteInfo = CursorMetro;
+		};
+/* End PBXContainerItemProxy section */
+
 /* Begin PBXFileReference section */
 		A3000001 /* Cursor Metro.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Cursor Metro.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		A3000002 /* CursorMetroTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = CursorMetroTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		A2000001 /* CursorPlusApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CursorPlusApp.swift; sourceTree = "<group>"; };
 		A2000002 /* PopoutView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PopoutView.swift; sourceTree = "<group>"; };
 		A2000003 /* AgentRunner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentRunner.swift; sourceTree = "<group>"; };
@@ -79,7 +98,6 @@
 		A2000043 /* ScreenshotThumbnailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenshotThumbnailView.swift; sourceTree = "<group>"; };
 		A2000037 /* EmbeddedTerminalView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EmbeddedTerminalView.swift; sourceTree = "<group>"; };
 		A2000038 /* TasksListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TasksListView.swift; sourceTree = "<group>"; };
-		A2000044 /* DashboardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DashboardView.swift; sourceTree = "<group>"; };
 		A2000039 /* ProjectTasksStorage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectTasksStorage.swift; sourceTree = "<group>"; };
 		A2000021 /* QuickActionCommand.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuickActionCommand.swift; sourceTree = "<group>"; };
 		A2000022 /* QuickActionEditSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuickActionEditSheet.swift; sourceTree = "<group>"; };
@@ -96,6 +114,15 @@
 		A2000040 /* ActionButton.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActionButton.swift; sourceTree = "<group>"; };
 		A2000041 /* ThreeDotMenuButton.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThreeDotMenuButton.swift; sourceTree = "<group>"; };
 		A2000042 /* IconButton.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IconButton.swift; sourceTree = "<group>"; };
+		A2000045 /* ProjectTasksStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectTasksStore.swift; sourceTree = "<group>"; };
+		A2000046 /* ProjectSettingsStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectSettingsStore.swift; sourceTree = "<group>"; };
+		A2000047 /* AgentSessionStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentSessionStore.swift; sourceTree = "<group>"; };
+		A2000048 /* TasksListStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TasksListStore.swift; sourceTree = "<group>"; };
+		A2000049 /* ImageAssetCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImageAssetCache.swift; sourceTree = "<group>"; };
+		A2000050 /* TestSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TestSupport.swift; sourceTree = "<group>"; };
+		A2000051 /* TimeBucketTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimeBucketTests.swift; sourceTree = "<group>"; };
+		A2000052 /* ProjectSettingsStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectSettingsStoreTests.swift; sourceTree = "<group>"; };
+		A2000053 /* TasksListStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TasksListStoreTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -109,6 +136,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		A4000002 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -116,6 +150,7 @@
 			isa = PBXGroup;
 			children = (
 				A5000002 /* CursorMetro */,
+				A5000026 /* CursorMetroTests */,
 				A5000003 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -123,11 +158,12 @@
 		A5000002 /* CursorMetro */ = {
 			isa = PBXGroup;
 			children = (
-				A5000010 /* App */,
+				A2000001 /* CursorPlusApp.swift */,
 				A5000024 /* UI */,
 				A5000022 /* Views */,
 				A5000018 /* Models */,
 				A5000019 /* Services */,
+				A5000025 /* Stores */,
 				A5000020 /* Theme */,
 				A5000021 /* Helpers */,
 				A2000005 /* Assets.xcassets */,
@@ -164,21 +200,12 @@
 			path = Components;
 			sourceTree = "<group>";
 		};
-		A5000010 /* App */ = {
-			isa = PBXGroup;
-			children = (
-				A2000001 /* CursorPlusApp.swift */,
-			);
-			path = App;
-			sourceTree = "<group>";
-		};
 		A5000011 /* MainWindow */ = {
 			isa = PBXGroup;
 			children = (
 				A2000002 /* PopoutView.swift */,
 				A2000037 /* EmbeddedTerminalView.swift */,
 				A2000038 /* TasksListView.swift */,
-				A2000044 /* DashboardView.swift */,
 				A5000012 /* Sidebar */,
 				A5000013 /* TopBar */,
 				A5000014 /* Composer */,
@@ -263,8 +290,20 @@
 			isa = PBXGroup;
 			children = (
 				A2000003 /* AgentRunner.swift */,
+				A2000049 /* ImageAssetCache.swift */,
 			);
 			path = Services;
+			sourceTree = "<group>";
+		};
+		A5000025 /* Stores */ = {
+			isa = PBXGroup;
+			children = (
+				A2000045 /* ProjectTasksStore.swift */,
+				A2000046 /* ProjectSettingsStore.swift */,
+				A2000047 /* AgentSessionStore.swift */,
+				A2000048 /* TasksListStore.swift */,
+			);
+			path = Stores;
 			sourceTree = "<group>";
 		};
 		A5000020 /* Theme */ = {
@@ -292,8 +331,20 @@
 			isa = PBXGroup;
 			children = (
 				A3000001 /* Cursor Metro.app */,
+				A3000002 /* CursorMetroTests.xctest */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		A5000026 /* CursorMetroTests */ = {
+			isa = PBXGroup;
+			children = (
+				A2000050 /* TestSupport.swift */,
+				A2000051 /* TimeBucketTests.swift */,
+				A2000052 /* ProjectSettingsStoreTests.swift */,
+				A2000053 /* TasksListStoreTests.swift */,
+			);
+			path = CursorMetroTests;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -321,6 +372,26 @@
 			productName = "CursorMetro";
 			productReference = A3000001 /* Cursor Metro.app */;
 			productType = "com.apple.product-type.application";
+		};
+		A6000005 /* CursorMetroTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = A7000004 /* Build configuration list for PBXNativeTarget "CursorMetroTests" */;
+			buildPhases = (
+				A6000006 /* Sources */,
+				A4000002 /* Frameworks */,
+				A6000007 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				A1200001 /* PBXTargetDependency */,
+			);
+			name = CursorMetroTests;
+			packageProductDependencies = (
+			);
+			productName = CursorMetroTests;
+			productReference = A3000002 /* CursorMetroTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
 		};
 /* End PBXNativeTarget section */
 
@@ -351,6 +422,7 @@
 			projectRoot = "";
 			targets = (
 				A6000001 /* CursorMetro */,
+				A6000005 /* CursorMetroTests */,
 			);
 		};
 /* End PBXProject section */
@@ -361,6 +433,13 @@
 			buildActionMask = 2147483647;
 			files = (
 				A1000005 /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A6000007 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -383,7 +462,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "codesign -s - --force --deep \"${BUILT_PRODUCTS_DIR}/${WRAPPER_NAME}\"\n";
+			shellScript = "if [ -d \"${BUILT_PRODUCTS_DIR}/${WRAPPER_NAME}/Contents/PlugIns\" ]; then\n  exit 0\nfi\ncodesign -s - --force --deep \"${BUILT_PRODUCTS_DIR}/${WRAPPER_NAME}\"\n";
 			showEnvVarsInLog = 0;
 		};
 /* End PBXShellScriptBuildPhase section */
@@ -431,12 +510,35 @@
 				A1000042 /* IconButton.swift in Sources */,
 				A1000037 /* EmbeddedTerminalView.swift in Sources */,
 				A1000038 /* TasksListView.swift in Sources */,
-				A1000044 /* DashboardView.swift in Sources */,
 				A1000039 /* ProjectTasksStorage.swift in Sources */,
+				A1000046 /* ProjectTasksStore.swift in Sources */,
+				A1000047 /* ProjectSettingsStore.swift in Sources */,
+				A1000048 /* AgentSessionStore.swift in Sources */,
+				A1000049 /* TasksListStore.swift in Sources */,
+				A1000050 /* ImageAssetCache.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A6000006 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A1000051 /* TestSupport.swift in Sources */,
+				A1000052 /* TimeBucketTests.swift in Sources */,
+				A1000053 /* ProjectSettingsStoreTests.swift in Sources */,
+				A1000054 /* TasksListStoreTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		A1200001 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = A6000001 /* CursorMetro */;
+			targetProxy = A1100001 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		A9000001 /* Debug */ = {
@@ -544,6 +646,48 @@
 			};
 			name = Release;
 		};
+		A9000005 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@loader_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 15.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.cursorplus.app.CursorMetroTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_VERSION = 5.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Cursor Metro.app/Contents/MacOS/Cursor Metro";
+				TEST_TARGET_NAME = CursorMetro;
+			};
+			name = Debug;
+		};
+		A9000006 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@loader_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 15.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.cursorplus.app.CursorMetroTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_VERSION = 5.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Cursor Metro.app/Contents/MacOS/Cursor Metro";
+				TEST_TARGET_NAME = CursorMetro;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -561,6 +705,15 @@
 			buildConfigurations = (
 				A9000003 /* Debug */,
 				A9000004 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		A7000004 /* Build configuration list for PBXNativeTarget "CursorMetroTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A9000005 /* Debug */,
+				A9000006 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

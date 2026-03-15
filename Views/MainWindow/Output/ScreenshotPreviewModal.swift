@@ -33,7 +33,7 @@ struct ScreenshotPreviewModal: View {
     private var singleDisplayImage: NSImage? {
         if let image { return image }
         guard let url = urls.first else { return nil }
-        return NSImage(contentsOf: url)
+        return ImageAssetCache.shared.screenshot(for: url)
     }
 
     var body: some View {
@@ -60,8 +60,8 @@ struct ScreenshotPreviewModal: View {
                     // Side-by-side images, each with optional delete X in top-right
                     ScrollView(.horizontal, showsIndicators: false) {
                         HStack(alignment: .center, spacing: CursorTheme.spaceL) {
-                            ForEach(Array(urls.enumerated()), id: \.offset) { index, url in
-                                if let nsImage = NSImage(contentsOf: url) {
+                            ForEach(Array(urls.enumerated()), id: \.element.path) { index, url in
+                                CachedPreviewImageView(url: url) { nsImage in
                                     screenshotImageCell(nsImage: nsImage, index: index)
                                 }
                             }
@@ -124,5 +124,23 @@ struct ScreenshotPreviewModal: View {
                 }
             }
             .shadow(color: .black.opacity(0.4), radius: 24, x: 0, y: 8)
+    }
+}
+
+private struct CachedPreviewImageView<Content: View>: View {
+    let url: URL
+    let content: (NSImage) -> Content
+
+    @State private var image: NSImage?
+
+    var body: some View {
+        Group {
+            if let image {
+                content(image)
+            }
+        }
+        .task(id: url.path) {
+            image = ImageAssetCache.shared.screenshot(for: url)
+        }
     }
 }

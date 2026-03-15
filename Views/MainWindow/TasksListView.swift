@@ -4,93 +4,6 @@ import UniformTypeIdentifiers
 
 // MARK: - Tasks (todos) list for a project
 
-/// One tab per task state.
-enum TasksListTab: String, CaseIterable {
-    case backlog = "Backlog"
-    case inProgress = "In Progress"
-    case completed = "Completed"
-    case deleted = "Deleted"
-}
-
-private struct SectionScopedTaskRow: Identifiable, Equatable {
-    let sectionID: String
-    let task: ProjectTask
-
-    var id: String {
-        "\(sectionID)-\(task.id.uuidString)"
-    }
-}
-
-private struct TasksTabCounts: Equatable {
-    let backlog: Int
-    let inProgress: Int
-    let completed: Int
-    let deleted: Int
-
-    func count(for tab: TasksListTab) -> Int {
-        switch tab {
-        case .backlog: return backlog
-        case .inProgress: return inProgress
-        case .completed: return completed
-        case .deleted: return deleted
-        }
-    }
-}
-
-/// One time-bucket group (title + tasks) for Equatable snapshot.
-private struct TimeBucketGroup: Equatable {
-    let title: String
-    let tasks: [ProjectTask]
-}
-
-/// Time-based section for Completed and Deleted tabs (Today, Yesterday, Last 7 Days, etc.).
-private enum TimeBucket: Int, CaseIterable {
-    case today = 0
-    case yesterday = 1
-    case last7Days = 2
-    case last30Days = 3
-    case older = 4
-
-    var title: String {
-        switch self {
-        case .today: return "Today"
-        case .yesterday: return "Yesterday"
-        case .last7Days: return "Last 7 Days"
-        case .last30Days: return "Last 30 Days"
-        case .older: return "Older"
-        }
-    }
-
-    static func bucket(for date: Date, reference: Date = Date(), calendar: Calendar = .current) -> TimeBucket {
-        let startOfToday = calendar.startOfDay(for: reference)
-        guard let startOfYesterday = calendar.date(byAdding: .day, value: -1, to: startOfToday),
-              let sevenDaysAgo = calendar.date(byAdding: .day, value: -7, to: startOfToday),
-              let thirtyDaysAgo = calendar.date(byAdding: .day, value: -30, to: startOfToday) else {
-            return .older
-        }
-        if date >= startOfToday { return .today }
-        if date >= startOfYesterday { return .yesterday }
-        if date >= sevenDaysAgo { return .last7Days }
-        if date >= thirtyDaysAgo { return .last30Days }
-        return .older
-    }
-}
-
-private struct TasksListSnapshot: Equatable {
-    let backlogTasks: [ProjectTask]
-    let reviewRows: [SectionScopedTaskRow]
-    let stoppedRows: [SectionScopedTaskRow]
-    let processingRows: [SectionScopedTaskRow]
-    let todoRows: [SectionScopedTaskRow]
-    let visibleCompletedTasks: [ProjectTask]
-    /// Completed tasks grouped by time bucket (Today, Yesterday, …), ordered newest first.
-    let completedGrouped: [TimeBucketGroup]
-    let deletedTasks: [ProjectTask]
-    /// Deleted tasks grouped by time bucket, ordered newest first.
-    let deletedGrouped: [TimeBucketGroup]
-    let counts: TasksTabCounts
-}
-
 private struct TasksTabBarView: View, Equatable {
     @Environment(\.colorScheme) private var colorScheme
 
@@ -215,21 +128,9 @@ struct TasksListView: View {
     var onLaunchSetupAgent: ((String) -> Void)? = nil
 
     @AppStorage(AppPreferences.preferredTerminalAppKey) private var preferredTerminalAppRawValue: String = PreferredTerminalApp.automatic.rawValue
-    @State private var tasks: [ProjectTask] = []
-    @State private var editingTask: ProjectTask?
-    @State private var editingDraft: String = ""
-    @State private var isAddingNewTask: Bool = false
-    @State private var newTaskDraft: String = ""
-    @State private var newTaskModelId: String = AvailableModels.autoID
+    @StateObject private var store = TasksListStore()
     @FocusState private var isNewTaskFieldFocused: Bool
     @FocusState private var isTaskEditorFocused: Bool
-    /// When true, show only completed tasks completed in the last 24 hours. When false, show all completed.
-    @State private var showOnlyRecentCompleted: Bool = true
-    /// Section titles that are expanded in the Completed tab. Only "Today" is expanded by default for performance.
-    @State private var expandedCompletedSections: Set<String> = ["Today"]
-    /// Section titles that are expanded in the Deleted tab. Only "Today" is expanded by default for performance.
-    @State private var expandedDeletedSections: Set<String> = ["Today"]
-    @State private var deletedTasksList: [ProjectTask] = []
     /// URLs and paths for full-screen task screenshot preview (saved task screenshots). When non-empty, modal shows images side by side.
     @State private var taskScreenshotPreviewURLs: [URL] = []
     @State private var taskScreenshotPreviewPaths: [String] = []
@@ -242,147 +143,29 @@ struct TasksListView: View {
     @State private var newTaskDraftScreenshots: [(id: UUID, image: NSImage)] = []
     /// While the add-task row is visible, intercept Cmd+V for image paste without breaking normal text paste.
     @State private var newTaskPasteKeyMonitor: Any?
-    /// Which top-level tab is selected.
-    @State private var selectedTasksTab: TasksListTab = .inProgress
-    /// True when Start Preview opened an external terminal window; Stop closes it.
-    @State private var previewRunningInExternalTerminal: Bool = false
-
-    private static let completedRecentInterval: TimeInterval = 24 * 60 * 60
 
     private var preferredTerminal: PreferredTerminalApp {
         PreferredTerminalApp(rawValue: preferredTerminalAppRawValue) ?? .automatic
     }
 
     private func reloadTasks() {
-        tasks = ProjectTasksStorage.tasks(workspacePath: workspacePath)
-        deletedTasksList = ProjectTasksStorage.deletedTasks(workspacePath: workspacePath)
-    }
-
-    private func hangDiagnosticsSnapshot() -> [String: String] {
-        let snapshot = taskSnapshot
-        return [
-            "tasksWorkspacePath": workspacePath,
-            "tasksSelectedTab": selectedTasksTab.rawValue,
-            "tasksBacklogCount": "\(snapshot.counts.backlog)",
-            "tasksInProgressCount": "\(snapshot.counts.inProgress)",
-            "tasksProcessingCount": "\(snapshot.processingRows.count)",
-            "tasksReviewCount": "\(snapshot.reviewRows.count)",
-            "tasksStoppedCount": "\(snapshot.stoppedRows.count)",
-            "tasksTodoCount": "\(snapshot.todoRows.count)",
-            "tasksCompletedCount": "\(snapshot.counts.completed)",
-            "tasksDeletedCount": "\(snapshot.counts.deleted)",
-            "tasksIsAddingNew": isAddingNewTask ? "true" : "false"
-        ]
-    }
-
-    private func updateHangDiagnosticsSnapshot() {
-        HangDiagnostics.shared.updateSnapshot(hangDiagnosticsSnapshot())
-    }
-
-    private func recordHangEvent(_ event: String, metadata: [String: String] = [:]) {
-        updateHangDiagnosticsSnapshot()
-        HangDiagnostics.shared.record(event, metadata: metadata)
+        store.configure(workspacePath: workspacePath, linkedStatuses: linkedStatuses)
     }
 
     private var taskSnapshot: TasksListSnapshot {
-        makeSnapshot()
-    }
-
-    private func makeSnapshot(referenceDate: Date = Date()) -> TasksListSnapshot {
-        let backlogTasks = tasks.filter { $0.taskState == .backlog }
-        let inProgressTasks = tasks.filter { $0.taskState == .inProgress }
-        let completedTasks = tasks.filter { $0.taskState == .completed }
-        let reviewTasks = inProgressTasks.filter { linkedStatuses[$0.id] == .review }
-        let stoppedTasks = inProgressTasks.filter { linkedStatuses[$0.id] == .stopped }
-        let processingTasks = inProgressTasks.filter { linkedStatuses[$0.id] == .processing }
-        let todoTasks = inProgressTasks.filter {
-            let state = linkedStatuses[$0.id]
-            return state == nil || state == AgentTaskState.none || state == .todo
-        }
-        let cutoff = referenceDate.addingTimeInterval(-Self.completedRecentInterval)
-        let visibleCompletedTasks = showOnlyRecentCompleted
-            ? completedTasks.filter { ($0.completedAt ?? .distantPast) >= cutoff }
-            : completedTasks
-        let sortedVisibleCompletedTasks = visibleCompletedTasks
-            .sorted { ($0.completedAt ?? .distantPast) >= ($1.completedAt ?? .distantPast) }
-
-        let completedGrouped = Self.groupTasksByTimeBucket(
-            sortedVisibleCompletedTasks,
-            dateKeyPath: \.completedAt,
-            reference: referenceDate
-        )
-        let deletedGrouped = Self.groupTasksByTimeBucket(
-            deletedTasksList,
-            dateKeyPath: \.deletedAt,
-            reference: referenceDate
-        )
-
-        return TasksListSnapshot(
-            backlogTasks: backlogTasks,
-            reviewRows: reviewTasks.map { SectionScopedTaskRow(sectionID: "Review", task: $0) },
-            stoppedRows: stoppedTasks.map { SectionScopedTaskRow(sectionID: "Stopped", task: $0) },
-            processingRows: processingTasks.map { SectionScopedTaskRow(sectionID: "Processing", task: $0) },
-            todoRows: todoTasks.map { SectionScopedTaskRow(sectionID: "Todo", task: $0) },
-            visibleCompletedTasks: sortedVisibleCompletedTasks,
-            completedGrouped: completedGrouped,
-            deletedTasks: deletedTasksList,
-            deletedGrouped: deletedGrouped,
-            counts: TasksTabCounts(
-                backlog: backlogTasks.count,
-                inProgress: inProgressTasks.count,
-                completed: completedTasks.count,
-                deleted: deletedTasksList.count
-            )
-        )
-    }
-
-    private static func groupTasksByTimeBucket(
-        _ tasks: [ProjectTask],
-        dateKeyPath: KeyPath<ProjectTask, Date?>,
-        reference: Date
-    ) -> [TimeBucketGroup] {
-        let calendar = Calendar.current
-        var buckets: [TimeBucket: [ProjectTask]] = [:]
-        for task in tasks {
-            let date = task[keyPath: dateKeyPath] ?? .distantPast
-            let bucket = TimeBucket.bucket(for: date, reference: reference, calendar: calendar)
-            buckets[bucket, default: []].append(task)
-        }
-        return TimeBucket.allCases
-            .filter { (buckets[$0]?.count ?? 0) > 0 }
-            .map { TimeBucketGroup(title: $0.title, tasks: buckets[$0] ?? []) }
+        store.snapshot
     }
 
     private func commitNewTask() {
-        let trimmed = newTaskDraft.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return }
-        recordHangEvent("tasks-commit-new-task", metadata: [
-            "contentLength": "\(trimmed.count)",
-            "screenshots": "\(newTaskDraftScreenshots.count)"
-        ])
-        let taskState: TaskState = (selectedTasksTab == .backlog) ? .backlog : .inProgress
-        _ = ProjectTasksStorage.addTask(
-            workspacePath: workspacePath,
-            content: trimmed,
-            screenshotImages: newTaskDraftScreenshots.map(\.image),
-            modelId: newTaskModelId,
-            taskState: taskState
-        )
-        reloadTasks()
-        newTaskDraft = ""
+        store.commitNewTask(screenshotImages: newTaskDraftScreenshots.map(\.image))
         newTaskDraftScreenshots = []
-        newTaskModelId = AvailableModels.autoID
-        isAddingNewTask = false
         isNewTaskFieldFocused = false
     }
 
     private func cancelNewTask() {
-        recordHangEvent("tasks-cancel-new-task")
-        newTaskDraft = ""
+        store.cancelNewTask()
         newTaskDraftScreenshots = []
         taskScreenshotPreviewImage = nil
-        newTaskModelId = AvailableModels.autoID
-        isAddingNewTask = false
         isNewTaskFieldFocused = false
     }
 
@@ -406,26 +189,19 @@ struct TasksListView: View {
     }
 
     private func showNewTaskComposer(selecting tab: TasksListTab? = nil) {
-        if let tab {
-            selectedTasksTab = tab
-        }
-        newTaskDraft = ""
+        store.showNewTaskComposer(selecting: tab)
         newTaskDraftScreenshots = []
         taskScreenshotPreviewImage = nil
-        newTaskModelId = AvailableModels.autoID
-        isAddingNewTask = true
     }
 
     private func selectTasksTab(_ tab: TasksListTab) {
-        guard selectedTasksTab != tab else { return }
-        recordHangEvent("tasks-select-tab", metadata: [
-            "from": selectedTasksTab.rawValue,
-            "to": tab.rawValue
-        ])
-        if tab != .inProgress && tab != .backlog && isAddingNewTask {
-            cancelNewTask()
+        let wasAddingNewTask = store.isAddingNewTask
+        store.selectTasksTab(tab)
+        if wasAddingNewTask && !store.isAddingNewTask {
+            newTaskDraftScreenshots = []
+            taskScreenshotPreviewImage = nil
+            isNewTaskFieldFocused = false
         }
-        selectedTasksTab = tab
     }
 
     var body: some View {
@@ -433,7 +209,7 @@ struct TasksListView: View {
         VStack(spacing: 0) {
             if showHeader { header }
             TasksTabBarView(
-                selectedTab: selectedTasksTab,
+                selectedTab: store.selectedTasksTab,
                 counts: snapshot.counts,
                 onSelect: selectTasksTab
             )
@@ -447,12 +223,12 @@ struct TasksListView: View {
                             .frame(height: 0)
                             .id("tasksScrollTop")
                         tabContent(snapshot: snapshot)
-                            .id(selectedTasksTab)
+                            .id(store.selectedTasksTab)
                     }
                     .padding(CursorTheme.paddingPanel)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .onChange(of: isAddingNewTask) { _, showing in
+                .onChange(of: store.isAddingNewTask) { _, showing in
                     if showing {
                         proxy.scrollTo("tasksScrollTop", anchor: .top)
                     }
@@ -465,7 +241,6 @@ struct TasksListView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .onAppear {
             reloadTasks()
-            updateHangDiagnosticsSnapshot()
             // Handle Cmd+T when it fired before this view was in the hierarchy (trigger already true).
             if triggerAddNewTask.wrappedValue {
                 showNewTaskComposer(selecting: .inProgress)
@@ -473,17 +248,14 @@ struct TasksListView: View {
             }
         }
         .onChange(of: workspacePath) { _, _ in reloadTasks() }
-        .onChange(of: selectedTasksTab) { _, _ in updateHangDiagnosticsSnapshot() }
-        .onChange(of: tasks) { _, _ in updateHangDiagnosticsSnapshot() }
-        .onChange(of: deletedTasksList) { _, _ in updateHangDiagnosticsSnapshot() }
-        .onChange(of: linkedStatuses) { _, _ in updateHangDiagnosticsSnapshot() }
+        .onChange(of: linkedStatuses) { _, newStatuses in store.updateLinkedStatuses(newStatuses) }
         .onChange(of: triggerAddNewTask.wrappedValue) { _, requested in
             if requested {
                 showNewTaskComposer(selecting: .inProgress)
                 triggerAddNewTask.wrappedValue = false
             }
         }
-        .onChange(of: isAddingNewTask) { _, showing in
+        .onChange(of: store.isAddingNewTask) { _, showing in
             if showing {
                 isNewTaskFieldFocused = true
                 installNewTaskPasteMonitorIfNeeded()
@@ -522,7 +294,7 @@ struct TasksListView: View {
 
     @ViewBuilder
     private func tabContent(snapshot: TasksListSnapshot) -> some View {
-        switch selectedTasksTab {
+        switch store.selectedTasksTab {
         case .inProgress:
             inProgressContent(snapshot: snapshot)
         case .backlog:
@@ -538,11 +310,11 @@ struct TasksListView: View {
     private func inProgressContent(snapshot: TasksListSnapshot) -> some View {
         previewButtonsBar
             .padding(.bottom, CursorTheme.spaceS)
-        let isEmpty = snapshot.counts.inProgress == 0 && !isAddingNewTask
+        let isEmpty = snapshot.counts.inProgress == 0 && !store.isAddingNewTask
         if isEmpty {
             emptyStateInProgress
         } else {
-            if isAddingNewTask {
+            if store.isAddingNewTask {
                 newTaskRow
             }
             inProgressSection(title: "Todo", rows: snapshot.todoRows)
@@ -565,20 +337,20 @@ struct TasksListView: View {
 
     /// Start Preview / Stop / Open in Browser / Configure Setup (external terminal; window closes on Stop).
     private var previewButtonsBar: some View {
-        let debugURL = ProjectSettingsStorage.getDebugURL(workspacePath: workspacePath) ?? ""
-        let startupContents = ProjectSettingsStorage.getStartupScriptContents(workspacePath: workspacePath) ?? ""
+        let debugURL = store.debugURL
+        let startupContents = store.startupScriptContents
         let isConfigured = !startupContents.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         let hasPreviewURL = !debugURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         return HStack(spacing: CursorTheme.spaceS) {
             addTaskChip
             Spacer(minLength: 0)
-            if previewRunningInExternalTerminal {
+            if store.previewRunningInExternalTerminal {
                 ActionButton(
                     title: "Stop",
                     icon: "stop.fill",
                     action: {
                         _ = closePreviewTerminalWindow(workspacePath: workspacePath)
-                        previewRunningInExternalTerminal = false
+                        store.previewRunningInExternalTerminal = false
                     },
                     help: "Close the preview terminal window",
                     style: .stop
@@ -602,7 +374,7 @@ struct TasksListView: View {
                         icon: "play.fill",
                         action: {
                             if launchStartupScriptInNewWindow(workspacePath: workspacePath, preferredTerminal: preferredTerminal) == nil {
-                                previewRunningInExternalTerminal = true
+                                store.previewRunningInExternalTerminal = true
                             }
                         },
                         help: "Run .metro/startup.sh in a new terminal window (closed when you tap Stop)",
@@ -641,14 +413,13 @@ struct TasksListView: View {
                 .frame(height: CursorTheme.fontIconList)
                 ForEach(scopedTasks) { item in
                     let task = item.task
-                    let canMoveToBacklog = linkedStatuses[task.id] == nil || linkedStatuses[task.id] == AgentTaskState.none
+                    let canMoveToBacklog = linkedStatuses[task.id] == nil || linkedStatuses[task.id] == .none
                     taskRow(
                         task,
                         stateTransitionLabel: canMoveToBacklog ? "Backlog" : nil,
                         stateTransitionIcon: "tray.full",
                         onStateTransition: canMoveToBacklog ? {
-                            ProjectTasksStorage.updateTask(workspacePath: workspacePath, id: task.id, taskState: .backlog)
-                            reloadTasks()
+                            store.moveTask(task, to: .backlog)
                         } : nil
                     )
                 }
@@ -720,17 +491,16 @@ struct TasksListView: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.bottom, CursorTheme.spaceS)
-        let isEmpty = snapshot.backlogTasks.isEmpty && !isAddingNewTask
+        let isEmpty = snapshot.backlogTasks.isEmpty && !store.isAddingNewTask
         if isEmpty {
             emptyStateBacklog
         } else {
-            if isAddingNewTask {
+            if store.isAddingNewTask {
                 newTaskRow
             }
             ForEach(snapshot.backlogTasks) { task in
                 taskRow(task, stateTransitionLabel: "Move to In Progress", stateTransitionIcon: "arrow.right.circle", onStateTransition: {
-                    ProjectTasksStorage.updateTask(workspacePath: workspacePath, id: task.id, taskState: .inProgress)
-                    reloadTasks()
+                    store.moveTask(task, to: .inProgress)
                 })
             }
         }
@@ -744,25 +514,21 @@ struct TasksListView: View {
             VStack(alignment: .leading, spacing: 0) {
                 HStack(spacing: CursorTheme.spaceS) {
                     Spacer(minLength: 0)
-                    Button(action: { showOnlyRecentCompleted.toggle() }) {
-                        Text(showOnlyRecentCompleted ? "Show all" : "Last 24 hours")
+                    Button(action: { store.setShowOnlyRecentCompleted(!store.showOnlyRecentCompleted) }) {
+                        Text(store.showOnlyRecentCompleted ? "Show all" : "Last 24 hours")
                             .font(.system(size: CursorTheme.fontSmall, weight: .medium))
                             .foregroundStyle(CursorTheme.brandBlue)
                     }
                     .buttonStyle(.plain)
                 }
                 .padding(.bottom, CursorTheme.spaceS)
-                ForEach(Array(snapshot.completedGrouped.enumerated()), id: \.offset) { _, group in
+                ForEach(snapshot.completedGrouped) { group in
                     CollapsibleGroupingView(
                         title: group.title,
                         count: group.tasks.count,
                         icon: "calendar",
-                        isExpanded: expandedCompletedSections.contains(group.title),
-                        onToggle: { expanded in
-                            var next = expandedCompletedSections
-                            if expanded { next.insert(group.title) } else { next.remove(group.title) }
-                            expandedCompletedSections = next
-                        },
+                        isExpanded: store.expandedCompletedSections.contains(group.title),
+                        onToggle: { expanded in store.setCompletedSectionExpanded(group.title, expanded: expanded) },
                         content: {
                             ForEach(group.tasks) { task in
                                 taskRow(task)
@@ -782,17 +548,13 @@ struct TasksListView: View {
             emptyStateDeleted
         } else {
             VStack(alignment: .leading, spacing: 0) {
-                ForEach(Array(snapshot.deletedGrouped.enumerated()), id: \.offset) { _, group in
+                ForEach(snapshot.deletedGrouped) { group in
                     CollapsibleGroupingView(
                         title: group.title,
                         count: group.tasks.count,
                         icon: "calendar",
-                        isExpanded: expandedDeletedSections.contains(group.title),
-                        onToggle: { expanded in
-                            var next = expandedDeletedSections
-                            if expanded { next.insert(group.title) } else { next.remove(group.title) }
-                            expandedDeletedSections = next
-                        },
+                        isExpanded: store.expandedDeletedSections.contains(group.title),
+                        onToggle: { expanded in store.setDeletedSectionExpanded(group.title, expanded: expanded) },
                         content: {
                             ForEach(group.tasks) { task in
                                 deletedTaskRow(task)
@@ -807,12 +569,7 @@ struct TasksListView: View {
     }
 
     private func commitEdit() {
-        let trimmed = editingDraft.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !trimmed.isEmpty, let id = editingTask?.id {
-            ProjectTasksStorage.updateTask(workspacePath: workspacePath, id: id, content: trimmed)
-            reloadTasks()
-        }
-        editingTask = nil
+        store.commitEdit()
     }
 
     @ViewBuilder
@@ -827,8 +584,8 @@ struct TasksListView: View {
             workspacePath: workspacePath,
             models: models,
             agentTaskState: linkedStatuses[task.id] ?? .none,
-            isEditing: editingTask?.id == task.id,
-            editDraft: $editingDraft,
+            isEditing: store.editingTask?.id == task.id,
+            editDraft: $store.editingDraft,
             isEditorFocused: $isTaskEditorFocused,
             onTap: {
                 if let linkedState = linkedStatuses[task.id], linkedState != AgentTaskState.none {
@@ -838,27 +595,23 @@ struct TasksListView: View {
                     let taskToEdit = task
                     // Defer so when triggered from context/menu the menu dismisses first and inline editor gets focus
                     DispatchQueue.main.async {
-                        editingDraft = content
-                        editingTask = taskToEdit
+                        store.editingDraft = content
+                        store.editingTask = taskToEdit
                     }
                 }
             },
             onCommitEdit: commitEdit,
-            onCancelEdit: { editingTask = nil },
+            onCancelEdit: { store.editingTask = nil },
             onToggleComplete: {
-                let nextState: TaskState = (task.taskState == .completed) ? .inProgress : .completed
-                ProjectTasksStorage.updateTask(workspacePath: workspacePath, id: task.id, taskState: nextState)
-                reloadTasks()
+                store.toggleTaskCompletion(task)
                 onTasksDidUpdate()
             },
             onSendToAgent: { onSendToAgent(task.content, task.id, task.screenshotPaths, task.modelId) },
             onModelChange: { newId in
-                ProjectTasksStorage.updateTask(workspacePath: workspacePath, id: task.id, modelId: newId)
-                reloadTasks()
+                store.updateTaskModel(task, modelId: newId)
             },
             onDelete: {
-                ProjectTasksStorage.deleteTask(workspacePath: workspacePath, id: task.id)
-                reloadTasks()
+                store.deleteTask(task)
             },
             onPreviewScreenshot: { paths, selectedPath, onDelete in
                 taskScreenshotPreviewURLs = paths.map { ProjectTasksStorage.taskScreenshotFileURL(workspacePath: workspacePath, screenshotPath: $0) }
@@ -867,8 +620,7 @@ struct TasksListView: View {
                 taskScreenshotPreviewOnDelete = onDelete
             },
             onDeleteScreenshot: !task.completed ? { path in
-                ProjectTasksStorage.removeTaskScreenshot(workspacePath: workspacePath, id: task.id, screenshotPath: path)
-                reloadTasks()
+                store.removeTaskScreenshot(taskID: task.id, screenshotPath: path)
             } : nil,
             stateTransitionLabel: stateTransitionLabel,
             stateTransitionIcon: stateTransitionIcon,
@@ -897,13 +649,11 @@ struct TasksListView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             Menu {
                 Button("Restore", systemImage: "arrow.uturn.backward") {
-                    ProjectTasksStorage.restoreTask(workspacePath: workspacePath, id: task.id)
-                    reloadTasks()
+                    store.restoreTask(task)
                 }
                 Divider()
                 Button("Delete permanently", systemImage: "trash", role: .destructive) {
-                    ProjectTasksStorage.permanentlyDeleteTask(workspacePath: workspacePath, id: task.id)
-                    reloadTasks()
+                    store.permanentlyDeleteTask(task)
                 }
             } label: {
                 Image(systemName: "ellipsis")
@@ -921,13 +671,11 @@ struct TasksListView: View {
         )
         .contextMenu {
             Button("Restore", systemImage: "arrow.uturn.backward") {
-                ProjectTasksStorage.restoreTask(workspacePath: workspacePath, id: task.id)
-                reloadTasks()
+                store.restoreTask(task)
             }
             Divider()
             Button("Delete permanently", systemImage: "trash", role: .destructive) {
-                ProjectTasksStorage.permanentlyDeleteTask(workspacePath: workspacePath, id: task.id)
-                reloadTasks()
+                store.permanentlyDeleteTask(task)
             }
         }
     }
@@ -952,7 +700,7 @@ struct TasksListView: View {
                     Image(systemName: "folder")
                         .font(.system(size: CursorTheme.fontCaption, weight: .medium))
                         .foregroundStyle(CursorTheme.textTertiary(for: colorScheme))
-                    Text((workspacePath as NSString).lastPathComponent)
+                    Text((store.workspacePath as NSString).lastPathComponent)
                         .font(.system(size: CursorTheme.fontSecondary, weight: .regular))
                         .foregroundStyle(CursorTheme.textTertiary(for: colorScheme))
                         .lineLimit(1)
@@ -1035,7 +783,7 @@ struct TasksListView: View {
                     .foregroundStyle(CursorTheme.textTertiary(for: colorScheme))
 
                 ZStack(alignment: .topLeading) {
-                    TextEditor(text: $newTaskDraft)
+                    TextEditor(text: $store.newTaskDraft)
                         .font(.system(size: 14, weight: .regular))
                         .foregroundStyle(CursorTheme.textPrimary(for: colorScheme))
                         .scrollContentBackground(.hidden)
@@ -1055,7 +803,7 @@ struct TasksListView: View {
                         .frame(minHeight: 24, maxHeight: 120)
                         .padding(.horizontal, -4)
                         .padding(.vertical, -4)
-                    if newTaskDraft.isEmpty {
+                    if store.newTaskDraft.isEmpty {
                         Text(newTaskDraftScreenshots.isEmpty ? "Add task…" : "Describe the task…")
                             .font(.system(size: 14, weight: .regular))
                             .foregroundStyle(CursorTheme.textTertiary(for: colorScheme))
@@ -1091,9 +839,9 @@ struct TasksListView: View {
 
             HStack(alignment: .center, spacing: CursorTheme.spaceS + CursorTheme.spaceXXS) {
                 ModelPickerView(
-                    selectedModelId: newTaskModelId,
+                    selectedModelId: store.newTaskModelId,
                     models: models,
-                    onSelect: { newTaskModelId = $0 }
+                    onSelect: { store.newTaskModelId = $0 }
                 )
             }
         }
@@ -1163,7 +911,7 @@ private struct TaskScreenshotStripView: View {
             EmptyView()
         } else {
             HStack(alignment: .center, spacing: CursorTheme.spaceS) {
-                ForEach(Array(paths.enumerated()), id: \.offset) { _, path in
+                ForEach(paths, id: \.self) { path in
                     TaskScreenshotThumbnailView(
                         workspacePath: workspacePath,
                         screenshotPath: path,

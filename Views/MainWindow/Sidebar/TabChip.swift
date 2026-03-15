@@ -9,7 +9,7 @@ struct LightBlueSpinner: View {
     var size: CGFloat = 14
 
     var body: some View {
-        TimelineView(.animation(minimumInterval: 1 / 60, paused: false)) { context in
+        TimelineView(.animation(minimumInterval: 1 / 24, paused: false)) { context in
             let rotation = context.date.timeIntervalSinceReferenceDate.remainder(dividingBy: 0.8) / 0.8 * 360
             Circle()
                 .trim(from: 0.15, to: 0.85)
@@ -196,10 +196,18 @@ struct TabChip: View {
 
 struct ProjectIconView: View {
     let path: String
+    @State private var icon: NSImage?
 
     var body: some View {
-        Image(nsImage: NSWorkspace.shared.icon(forFile: path))
-            .resizable()
-            .aspectRatio(contentMode: .fit)
+        Group {
+            if let icon {
+                Image(nsImage: icon)
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+            }
+        }
+        .task(id: path) {
+            icon = ImageAssetCache.shared.projectIcon(for: path)
+        }
     }
 }

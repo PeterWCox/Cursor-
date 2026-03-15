@@ -119,6 +119,13 @@ private struct ProjectTasksFile: Codable {
 }
 
 enum ProjectTasksStorage {
+    static let didChangeNotification = Notification.Name("ProjectTasksStorageDidChange")
+    private static var cachedFilesByWorkspace: [String: ProjectTasksFile] = [:]
+
+    private static func normalizedWorkspacePath(_ workspacePath: String) -> String {
+        workspacePath.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
     private static func setTaskState(_ newState: TaskState, for task: inout ProjectTask) {
         let previousState = task.taskState
         guard previousState != newState else { return }
@@ -170,13 +177,21 @@ enum ProjectTasksStorage {
     }
 
     private static func load(workspacePath: String) -> ProjectTasksFile {
+        let normalizedPath = normalizedWorkspacePath(workspacePath)
+        if let cached = cachedFilesByWorkspace[normalizedPath] {
+            return cached
+        }
+
         migrateCursormetroToMetroIfNeeded(workspacePath: workspacePath)
         let url = tasksURL(workspacePath: workspacePath)
         if let data = try? Data(contentsOf: url),
            let decoded = try? JSONDecoder().decode(ProjectTasksFile.self, from: data) {
+            cachedFilesByWorkspace[normalizedPath] = decoded
             return decoded
         }
-        return ProjectTasksFile(tasks: [])
+        let empty = ProjectTasksFile(tasks: [])
+        cachedFilesByWorkspace[normalizedPath] = empty
+        return empty
     }
 
     private static func save(workspacePath: String, _ file: ProjectTasksFile) {
@@ -185,6 +200,13 @@ enum ProjectTasksStorage {
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         guard let data = try? JSONEncoder().encode(file) else { return }
         try? data.write(to: url, options: .atomic)
+        let normalizedPath = normalizedWorkspacePath(workspacePath)
+        cachedFilesByWorkspace[normalizedPath] = file
+        NotificationCenter.default.post(
+            name: didChangeNotification,
+            object: nil,
+            userInfo: ["workspacePath": normalizedPath]
+        )
     }
 
     /// Active tasks only (not deleted). Newest first so new tasks appear at top of In Review/Backlog.

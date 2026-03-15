@@ -5,7 +5,7 @@ import SwiftUI
 struct OutputScrollView<Content: View>: View {
     let tab: AgentTab
     let scrollToken: UUID
-    @ViewBuilder let content: () -> Content
+    @ViewBuilder let content: Content
 
     @State private var bottomVisibleID: AnyHashable?
     /// When true, we just programmatically scrolled (auto-scroll); hide the button briefly so it doesn’t flash.
@@ -21,7 +21,7 @@ struct OutputScrollView<Content: View>: View {
     var body: some View {
         ScrollViewReader { proxy in
             ScrollView {
-                content()
+                content
             }
             .scrollPosition(id: $bottomVisibleID, anchor: .bottom)
             .frame(maxHeight: .infinity)

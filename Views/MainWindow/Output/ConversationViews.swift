@@ -114,11 +114,14 @@ private struct ThinkingDotsView: View {
                     .frame(width: 4, height: 4)
                     .scaleEffect(phase == index ? 1.2 : 0.85)
                     .opacity(phase == index ? 1 : 0.5)
-                    .animation(.easeInOut(duration: 0.25), value: phase)
             }
         }
-        .onReceive(Timer.publish(every: 0.4, on: .main, in: .common).autoconnect()) { _ in
-            phase = (phase + 1) % 3
+        .animation(.easeInOut(duration: 0.25), value: phase)
+        .task {
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 450_000_000)
+                phase = (phase + 1) % 3
+            }
         }
     }
 }
@@ -259,9 +262,16 @@ private struct UserMessageContentView: View {
     let prompt: String
     let workspacePath: String
     @Binding var screenshotPreviewURL: URL?
+    private let displayText: String
+    private let paths: [String]
 
-    private var displayText: String { userPromptDisplayText(from: prompt) }
-    private var paths: [String] { screenshotPaths(from: prompt) }
+    init(prompt: String, workspacePath: String, screenshotPreviewURL: Binding<URL?>) {
+        self.prompt = prompt
+        self.workspacePath = workspacePath
+        _screenshotPreviewURL = screenshotPreviewURL
+        displayText = userPromptDisplayText(from: prompt)
+        paths = screenshotPaths(from: prompt)
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -273,7 +283,7 @@ private struct UserMessageContentView: View {
                     .fixedSize(horizontal: false, vertical: true)
                     .textSelection(.enabled)
             }
-            ForEach(Array(paths.enumerated()), id: \.offset) { _, path in
+            ForEach(paths, id: \.self) { path in
                 UserMessageScreenshotView(path: path, workspacePath: workspacePath, screenshotPreviewURL: $screenshotPreviewURL)
             }
         }
@@ -289,19 +299,26 @@ private struct UserMessageScreenshotView: View {
         screenshotFileURL(path: path, workspacePath: workspacePath)
     }
 
+    @State private var loadedImage: NSImage?
+
     var body: some View {
-        if let nsImage = NSImage(contentsOf: imageURL) {
-            Image(nsImage: nsImage)
-                .resizable()
-                .aspectRatio(contentMode: .fit)
-                .frame(maxWidth: 200, maxHeight: 200)
-                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .stroke(CursorTheme.border, lineWidth: 1)
-                )
-                .onTapGesture { screenshotPreviewURL = imageURL }
-                .contentShape(Rectangle())
+        Group {
+            if let nsImage = loadedImage {
+                Image(nsImage: nsImage)
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+                    .frame(maxWidth: 200, maxHeight: 200)
+                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .stroke(CursorTheme.border, lineWidth: 1)
+                    )
+                    .onTapGesture { screenshotPreviewURL = imageURL }
+                    .contentShape(Rectangle())
+            }
+        }
+        .task(id: imageURL.path) {
+            loadedImage = ImageAssetCache.shared.screenshot(for: imageURL)
         }
     }
 }
@@ -407,14 +424,19 @@ struct ConversationTurnView: View, Equatable {
 // MARK: - Streaming placeholder
 
 struct ProcessingPlaceholderView: View {
+    @State private var dotCount = 1
+
     var body: some View {
         HStack(spacing: 8) {
             LightBlueSpinner(size: 16)
-            TimelineView(.periodic(from: .now, by: 0.4)) { timeline in
-                let dotCount = (Int(timeline.date.timeIntervalSince1970 * 2.5) % 3) + 1
-                Text("Processing request" + String(repeating: ".", count: dotCount))
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundStyle(CursorTheme.textSecondary)
+            Text("Processing request" + String(repeating: ".", count: dotCount))
+                .font(.system(size: 13, weight: .medium))
+                .foregroundStyle(CursorTheme.textSecondary)
+        }
+        .task {
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 400_000_000)
+                dotCount = dotCount == 3 ? 1 : dotCount + 1
             }
         }
     }

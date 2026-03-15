@@ -9,6 +9,7 @@ struct SettingsView: View {
     #endif
     @Environment(\.colorScheme) private var colorScheme
     @EnvironmentObject var appState: AppState
+    @EnvironmentObject private var projectSettingsStore: ProjectSettingsStore
     @AppStorage("workspacePath") private var workspacePath: String = FileManager.default.homeDirectoryForCurrentUser.path
     @AppStorage(AppPreferences.projectsRootPathKey) private var projectsRootPath: String = AppPreferences.defaultProjectsRootPath
     @AppStorage(AppPreferences.preferredTerminalAppKey) private var preferredTerminalAppRawValue: String = PreferredTerminalApp.automatic.rawValue
@@ -17,7 +18,6 @@ struct SettingsView: View {
     @State private var globalCommands: [QuickActionCommand] = []
     @State private var projectCommands: [QuickActionCommand] = []
     @State private var editingCommand: QuickActionCommand?
-    @State private var showAddSheet = false
     @State private var debugURL: String = ""
     @State private var startupScriptContents: String = ""
 
@@ -123,10 +123,6 @@ struct SettingsView: View {
                 ForEach(projectCommands) { cmd in
                     quickActionRow(cmd, scope: .project)
                 }
-                // Add quick action – commented out
-                // Button(action: { showAddSheet = true }) {
-                //     Label("Add quick action", systemImage: "plus.circle")
-                // }
             } header: {
                 Text("Quick actions")
             } footer: {
@@ -137,25 +133,21 @@ struct SettingsView: View {
         .frame(width: 480, height: 420)
         .onAppear {
             reloadCommands()
-            debugURL = ProjectSettingsStorage.getDebugURL(workspacePath: workspacePath) ?? ""
-            startupScriptContents = ProjectSettingsStorage.getStartupScriptContents(workspacePath: workspacePath) ?? ""
+            let snapshot = projectSettingsStore.snapshot(for: workspacePath)
+            debugURL = snapshot.debugURL
+            startupScriptContents = snapshot.startupScriptContents
         }
         .onChange(of: workspacePath) { _, _ in
             reloadCommands()
-            debugURL = ProjectSettingsStorage.getDebugURL(workspacePath: workspacePath) ?? ""
-            startupScriptContents = ProjectSettingsStorage.getStartupScriptContents(workspacePath: workspacePath) ?? ""
+            let snapshot = projectSettingsStore.snapshot(for: workspacePath)
+            debugURL = snapshot.debugURL
+            startupScriptContents = snapshot.startupScriptContents
         }
         .onDisappear {
             let trimmedUrl = debugURL.trimmingCharacters(in: .whitespacesAndNewlines)
-            ProjectSettingsStorage.setDebugURL(workspacePath: workspacePath, trimmedUrl.isEmpty ? nil : trimmedUrl)
-            ProjectSettingsStorage.setStartupScriptContents(workspacePath: workspacePath, startupScriptContents.isEmpty ? nil : startupScriptContents)
+            projectSettingsStore.setDebugURL(workspacePath: workspacePath, trimmedUrl.isEmpty ? nil : trimmedUrl)
+            projectSettingsStore.setStartupScriptContents(workspacePath: workspacePath, startupScriptContents.isEmpty ? nil : startupScriptContents)
         }
-        // Add quick action sheet – commented out
-        // .sheet(isPresented: $showAddSheet) {
-        //     QuickActionEditSheet(workspacePath: workspacePath, existing: nil) { newCommand in
-        //         addCommand(newCommand)
-        //     }
-        // }
         .sheet(item: $editingCommand) { cmd in
             QuickActionEditSheet(workspacePath: workspacePath, existing: cmd) { updated in
                 updateCommand(old: cmd, updated: updated)
@@ -195,16 +187,6 @@ struct SettingsView: View {
     private func reloadCommands() {
         globalCommands = QuickActionStorage.loadGlobalCommands()
         projectCommands = QuickActionStorage.loadProjectCommands(workspacePath: workspacePath)
-    }
-
-    private func addCommand(_ cmd: QuickActionCommand) {
-        if cmd.scope == .project {
-            projectCommands.append(cmd)
-            QuickActionStorage.saveProjectCommands(workspacePath: workspacePath, projectCommands)
-        } else {
-            globalCommands.append(cmd)
-            QuickActionStorage.saveGlobalCommands(globalCommands)
-        }
     }
 
     private func updateCommand(old: QuickActionCommand, updated: QuickActionCommand) {

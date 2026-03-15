@@ -108,6 +108,8 @@ struct CursorPlusApp: App {
         Settings {
             SettingsView()
                 .environmentObject(appDelegate.appState)
+                .environmentObject(appDelegate.projectTasksStore)
+                .environmentObject(appDelegate.projectSettingsStore)
         }
     }
 }
@@ -156,10 +158,13 @@ private let collapsedPanelMinHeight: CGFloat = 280
 /// Minimum width when expanded; prevents shrinking below a usable size (e.g. comfortable on 14" MacBook).
 private let minExpandedPanelWidth: CGFloat = 440
 
+@MainActor
 class AppDelegate: NSObject, NSApplicationDelegate {
     var statusItem: NSStatusItem!
     var panel: FloatingPanel!
     let appState = AppState()
+    let projectTasksStore = ProjectTasksStore()
+    let projectSettingsStore = ProjectSettingsStore()
     private var cancellables = Set<AnyCancellable>()
     private var requestNewTaskObserver: NSObjectProtocol?
     private var openInBrowserKeyMonitor: Any?
@@ -218,6 +223,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 self?.panel.orderOut(nil)
             })
             .environmentObject(appState)
+            .environmentObject(projectTasksStore)
+            .environmentObject(projectSettingsStore)
             .environmentObject(appState.tabManager)
         )
         panel.contentView = hostingView
@@ -733,7 +740,7 @@ class AppState: ObservableObject {
         return url.lastPathComponent.isEmpty ? url.deletingLastPathComponent().lastPathComponent : url.lastPathComponent
     }
 
-    /// Presents the folder picker. If user selects a folder, updates `workspacePath` and calls `completion` with the path (so the caller can set the current tab’s workspace).
+    /// Presents the folder picker. If user selects a folder, updates `workspacePath` and calls `completion` with the path (so the caller can set the current tab's workspace).
     func changeWorkspace(completion: ((String) -> Void)? = nil) {
         DispatchQueue.main.async { [weak self] in
             guard let self = self else { return }

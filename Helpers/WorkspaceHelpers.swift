@@ -3,10 +3,12 @@ import AppKit
 
 // MARK: - Screenshot and prompt helpers
 
+private let attachedScreenshotRegex = try? NSRegularExpression(pattern: "\\[Screenshot attached:\\s*([^\\]]+)\\]")
+private let attachedScreenshotDisplayRegex = try? NSRegularExpression(pattern: "\\s*\\[Screenshot attached:\\s*[^\\]]+\\]\\s*")
+
 /// Returns the prompt with all "[Screenshot attached: path]" references removed, trimmed. Use for display only.
 func userPromptDisplayText(from prompt: String) -> String {
-    let pattern = "\\s*\\[Screenshot attached:\\s*[^\\]]+\\]\\s*"
-    guard let regex = try? NSRegularExpression(pattern: pattern) else { return prompt }
+    guard let regex = attachedScreenshotDisplayRegex else { return prompt }
     let range = NSRange(prompt.startIndex..., in: prompt)
     let stripped = regex.stringByReplacingMatches(
         in: prompt,
@@ -22,8 +24,7 @@ func userPromptDisplayText(from prompt: String) -> String {
 
 /// Extracts screenshot paths from prompt (e.g. ".cursor/pasted-screenshot-1.png"), capped at maxScreenshots.
 func screenshotPaths(from prompt: String) -> [String] {
-    let pattern = "\\[Screenshot attached:\\s*([^\\]]+)\\]"
-    guard let regex = try? NSRegularExpression(pattern: pattern) else { return [] }
+    guard let regex = attachedScreenshotRegex else { return [] }
     let range = NSRange(prompt.startIndex..., in: prompt)
     let matches = regex.matches(in: prompt, range: range)
     var paths: [String] = []

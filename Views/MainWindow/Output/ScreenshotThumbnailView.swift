@@ -69,38 +69,45 @@ struct ScreenshotThumbnailView: View {
     var onTapPreview: (() -> Void)? = nil
     var onDelete: (() -> Void)? = nil
 
-    private var displayImage: NSImage? {
-        if let image { return image }
-        if let url = imageURL { return NSImage(contentsOf: url) }
-        return nil
-    }
+    @State private var displayImage: NSImage?
 
     var body: some View {
-        if let nsImage = displayImage {
-            HStack(alignment: .center, spacing: 6) {
-                Image(nsImage: nsImage)
-                    .resizable()
-                    .aspectRatio(contentMode: .fill)
-                    .frame(width: size.width, height: size.height)
-                    .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                            .stroke(CursorTheme.border(for: colorScheme), lineWidth: 1)
-                    )
-                    .overlay(ScreenshotExpandPreviewOverlay(cornerRadius: cornerRadius, cornerFrameSize: min(size.width, size.height) * 0.36))
-                    .contentShape(Rectangle())
-                    .onTapGesture {
-                        onTapPreview?()
-                    }
+        Group {
+            if let nsImage = displayImage {
+                HStack(alignment: .center, spacing: 6) {
+                    Image(nsImage: nsImage)
+                        .resizable()
+                        .aspectRatio(contentMode: .fill)
+                        .frame(width: size.width, height: size.height)
+                        .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                                .stroke(CursorTheme.border(for: colorScheme), lineWidth: 1)
+                        )
+                        .overlay(ScreenshotExpandPreviewOverlay(cornerRadius: cornerRadius, cornerFrameSize: min(size.width, size.height) * 0.36))
+                        .contentShape(Rectangle())
+                        .onTapGesture {
+                            onTapPreview?()
+                        }
 
-                if onDelete != nil {
-                    Button(action: { onDelete?() }) {
-                        Image(systemName: "xmark.circle.fill")
-                            .font(.system(size: 18))
-                            .foregroundStyle(CursorTheme.textTertiary(for: colorScheme))
+                    if onDelete != nil {
+                        Button(action: { onDelete?() }) {
+                            Image(systemName: "xmark.circle.fill")
+                                .font(.system(size: 18))
+                                .foregroundStyle(CursorTheme.textTertiary(for: colorScheme))
+                        }
+                        .buttonStyle(.plain)
                     }
-                    .buttonStyle(.plain)
                 }
+            }
+        }
+        .task(id: imageURL?.path ?? image?.hash.description ?? "") {
+            if let image {
+                displayImage = image
+            } else if let imageURL {
+                displayImage = ImageAssetCache.shared.screenshot(for: imageURL)
+            } else {
+                displayImage = nil
             }
         }
     }

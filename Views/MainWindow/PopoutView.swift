@@ -17,6 +17,18 @@ private final class TasksViewShortcutCoordinator: ObservableObject {
     }
 }
 
+private let projectSetupAgentPrompt = """
+Set up Cursor Metro for this project from scratch.
+
+1) Create or overwrite .metro/startup.sh with a script that builds and runs the app. Use #!/bin/bash and make the script executable.
+
+Important: The script is always run with the shell's current working directory set to the **project root** (the directory that contains .metro), NOT inside .metro. Write the script as if it runs in the project root: use commands like `npm run dev` if package.json is in the project root, or `cd budget && npm run dev` (or whatever the app subfolder is) if the app lives in a subfolder. Do not cd into .metro or assume the script runs from .metro.
+
+2) If this is a web app, create or update .metro/project.json with a "debugUrl" field set to the URL where the app is served (e.g. http://localhost:3000).
+
+Detect the project type from the repo (package.json, etc.) and configure accordingly.
+"""
+
 /// Installs Cmd+T key monitor when Tasks panel is visible so shortcuts work when focus is inside the list.
 /// Also handles appState.requestShowTasksAndNewTask (from panel performKeyEquivalent) so Cmd+T always works when the panel is key.
 private struct TasksViewShortcutMonitorModifier: ViewModifier {
@@ -236,6 +248,8 @@ struct PopoutView: View {
     @AppStorage("showPinnedQuestionsPanel") private var showPinnedQuestionsPanel: Bool = true
     @AppStorage(AppPreferences.sidebarOnRightKey) private var isSidebarOnRight: Bool = false
     @EnvironmentObject var tabManager: TabManager
+    @EnvironmentObject private var projectTasksStore: ProjectTasksStore
+    @EnvironmentObject private var projectSettingsStore: ProjectSettingsStore
 
     /// App always uses dark mode; theme picker is disabled.
     private var resolvedColorScheme: ColorScheme? { .dark }
@@ -253,6 +267,7 @@ struct PopoutView: View {
     /// When true, Cmd+T in Tasks view should add a new task; set by window-level shortcut and observed by TasksListView.
     @State private var tasksViewTriggerAddNew: Bool = false
     @StateObject private var tasksViewShortcutCoordinator = TasksViewShortcutCoordinator()
+    @StateObject private var agentSessionStore = AgentSessionStore()
     /// Tab whose agent header prompt accordion is expanded (show full prompt below title).
     @State private var expandedPromptTabID: UUID? = nil
     /// How many of the most recent turns are mounted for each tab. `Int.max` means full history.
@@ -280,7 +295,7 @@ struct PopoutView: View {
     }
 
     private func previewURL(for workspacePath: String) -> URL? {
-        guard let urlString = ProjectSettingsStorage.getDebugURL(workspacePath: workspacePath) else {
+        guard let urlString = projectSettingsStore.debugURL(for: workspacePath) else {
             return nil
         }
         return URL(string: urlString)
@@ -399,7 +414,7 @@ struct PopoutView: View {
     }
 
     private func taskStatesByID(for workspacePath: String) -> [UUID: TaskState] {
-        Dictionary(uniqueKeysWithValues: ProjectTasksStorage.tasks(workspacePath: workspacePath).map { ($0.id, $0.taskState) })
+        projectTasksStore.taskStatesByID(for: workspacePath)
     }
 
     /// Agent status of a task in this workspace if any agent tab is linked to it.
@@ -444,7 +459,7 @@ struct PopoutView: View {
         ]
 
         if let tasksPath = tabManager.selectedTasksViewPath {
-            let tasks = ProjectTasksStorage.tasks(workspacePath: tasksPath)
+            let tasks = projectTasksStore.tasks(for: tasksPath)
             let linkedStatuses = linkedStatusesForWorkspace(tasksPath)
             snapshot["tasksPath"] = tasksPath
             snapshot["tasksTotal"] = "\(tasks.count)"
@@ -499,7 +514,7 @@ struct PopoutView: View {
 
     /// Focuses the agent tab linked to the task (reopens from recently closed if needed). Does not send a prompt.
     private func openLinkedAgent(for task: ProjectTask, workspacePath: String) {
-        if let agentTabID = ProjectTasksStorage.linkedAgentTabID(workspacePath: workspacePath, taskID: task.id),
+        if let agentTabID = projectTasksStore.linkedAgentTabID(workspacePath: workspacePath, taskID: task.id),
            tabManager.tabs.contains(where: { $0.id == agentTabID }) {
             selectLinkedAgentTab(agentTabID)
             return
@@ -507,12 +522,12 @@ struct PopoutView: View {
         if tabManager.reopenLinkedTaskTab(
             workspacePath: workspacePath,
             taskID: task.id,
-            preferredTabID: ProjectTasksStorage.linkedAgentTabID(workspacePath: workspacePath, taskID: task.id)
+            preferredTabID: projectTasksStore.linkedAgentTabID(workspacePath: workspacePath, taskID: task.id)
         ) {
             return
         }
         guard let tab = tabManager.tabs.first(where: { $0.workspacePath == workspacePath && $0.linkedTaskID == task.id }) else { return }
-        ProjectTasksStorage.assignAgentTab(workspacePath: workspacePath, taskID: task.id, agentTabID: tab.id)
+        projectTasksStore.assignAgentTab(workspacePath: workspacePath, taskID: task.id, agentTabID: tab.id)
         selectLinkedAgentTab(tab.id)
     }
 
@@ -536,7 +551,7 @@ struct PopoutView: View {
             stopStreaming(for: tab)
             tabManager.closeTab(tab.id)
         }
-        ProjectTasksStorage.clearAgentTab(workspacePath: workspacePath, taskID: task.id)
+        projectTasksStore.clearAgentTab(workspacePath: workspacePath, taskID: task.id)
         appState.notifyTasksDidUpdate()
         sendTaskToAgent(
             prompt: task.content,
@@ -551,8 +566,7 @@ struct PopoutView: View {
     /// Sends a "continue" prompt to the conversation linked to the task so the user can restart the agent from the 3-dot menu.
     private func sendContinueToLinkedConversation(task: ProjectTask, workspacePath: String) {
         guard let tab = tabManager.tabs.first(where: { $0.workspacePath == workspacePath && $0.linkedTaskID == task.id }) else { return }
-        tab.prompt = "continue"
-        sendPrompt(tab: tab)
+        sendInCurrentTab(prompt: "continue", tab: tab)
     }
 
     private func sendTaskToAgent(prompt: String, taskID: UUID, screenshotPaths: [String], modelId: String, workspacePath: String, selectAgent: Bool = false) {
@@ -563,7 +577,7 @@ struct PopoutView: View {
             "screenshots": "\(screenshotPaths.count)",
             "selectAgent": selectAgent ? "true" : "false"
         ])
-        if let existingAgentTabID = ProjectTasksStorage.linkedAgentTabID(workspacePath: workspacePath, taskID: taskID),
+        if let existingAgentTabID = projectTasksStore.linkedAgentTabID(workspacePath: workspacePath, taskID: taskID),
            tabManager.tabs.contains(where: { $0.id == existingAgentTabID }) {
             if selectAgent {
                 selectLinkedAgentTab(existingAgentTabID)
@@ -583,7 +597,7 @@ struct PopoutView: View {
             select: selectAgent
         ) {
             newTab.linkedTaskID = taskID
-            ProjectTasksStorage.assignAgentTab(workspacePath: workspacePath, taskID: taskID, agentTabID: newTab.id)
+            projectTasksStore.assignAgentTab(workspacePath: workspacePath, taskID: taskID, agentTabID: newTab.id)
             if !screenshotPaths.isEmpty {
                 newTab.hasAttachedScreenshot = true
             }
@@ -595,7 +609,7 @@ struct PopoutView: View {
         let trimmedAgentPrompt = (agentPrompt ?? taskContent).trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedTaskContent.isEmpty, !trimmedAgentPrompt.isEmpty else { return }
 
-        let task = ProjectTasksStorage.addTask(workspacePath: workspacePath, content: trimmedTaskContent, modelId: modelId)
+        let task = projectTasksStore.addTask(workspacePath: workspacePath, content: trimmedTaskContent, modelId: modelId)
         sendTaskToAgent(
             prompt: trimmedAgentPrompt,
             taskID: task.id,
@@ -642,8 +656,7 @@ struct PopoutView: View {
             onTasksDidUpdate: { appState.notifyTasksDidUpdate() },
             onDismiss: { tabManager.hideTasksView() },
             onLaunchSetupAgent: { path in
-                _ = addNewAgentTab(initialPrompt: DashboardView.setupAgentPrompt, lastWorkspacePath: path)
-                tabManager.hideDashboardView()
+                _ = addNewAgentTab(initialPrompt: projectSetupAgentPrompt, lastWorkspacePath: path)
             },
             showHeader: false
         )
@@ -863,7 +876,7 @@ struct PopoutView: View {
     /// Linked agent tabs are shown only for in-progress tasks that still need agent visibility.
     private func isAgentTabVisibleInSidebar(_ tab: AgentTab) -> Bool {
         guard let taskID = tab.linkedTaskID else { return true }
-        guard let task = ProjectTasksStorage.task(workspacePath: tab.workspacePath, id: taskID) else { return false }
+        guard let task = projectTasksStore.task(for: tab.workspacePath, id: taskID) else { return false }
         guard task.taskState == .inProgress else { return false }
         let agentState = linkedTaskState(for: tab)
         return agentState == .processing || agentState == .review || agentState == .stopped
@@ -1415,38 +1428,6 @@ struct PopoutView: View {
 
                             }
                             if !isCollapsed {
-                                // Preview tab and internal terminal commented out; buttons moved to Tasks → In Progress; use external terminal (close on Stop). Uncomment to restore.
-                                // let isPreviewSelected = tabManager.selectedDashboardViewPath == group.path
-                                // Button {
-                                //     dashboardTabsByWorkspacePath[group.path] = .preview
-                                //     tabManager.showDashboardView(workspacePath: group.path)
-                                //     if appState.isMainContentCollapsed {
-                                //         withAnimation(.easeInOut(duration: 0.2)) { appState.isMainContentCollapsed = false }
-                                //     }
-                                // } label: {
-                                //     HStack(spacing: 6) {
-                                //         Image(systemName: "square.grid.2x2")
-                                //             .font(.system(size: 12))
-                                //             .foregroundStyle(isPreviewSelected ? CursorTheme.textPrimary(for: colorScheme) : CursorTheme.textSecondary(for: colorScheme))
-                                //         Text("Preview")
-                                //             .font(.system(size: 12, weight: isPreviewSelected ? .semibold : .medium))
-                                //             .foregroundStyle(isPreviewSelected ? CursorTheme.textPrimary(for: colorScheme) : CursorTheme.textSecondary(for: colorScheme))
-                                //             .lineLimit(1)
-                                //             .frame(maxWidth: .infinity, alignment: .leading)
-                                //     }
-                                //     .padding(.horizontal, 12)
-                                //     .padding(.vertical, 7)
-                                //     .background(
-                                //         isPreviewSelected ? CursorTheme.surfaceRaised(for: colorScheme) : CursorTheme.surfaceMuted(for: colorScheme),
-                                //         in: RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                //     )
-                                //     .overlay(
-                                //         RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                //             .stroke(isPreviewSelected ? CursorTheme.borderStrong(for: colorScheme) : CursorTheme.border(for: colorScheme).opacity(0.6), lineWidth: 1)
-                                //     )
-                                // }
-                                // .buttonStyle(.plain)
-                                // .help("Preview: terminal, Start Preview, Configure Setup")
                                 let isTasksSelected = tabManager.selectedTasksViewPath == group.path
                                 Button {
                                     tabManager.showTasksView(workspacePath: group.path)
@@ -1497,7 +1478,6 @@ struct PopoutView: View {
                                             tabManager.selectedTerminalID = term.id
                                             tabManager.selectedTabID = nil
                                             tabManager.selectedTasksViewPath = nil
-                                            tabManager.selectedDashboardViewPath = nil
                                             tabManager.selectedProjectPath = term.workspacePath
                                             if appState.isMainContentCollapsed {
                                                 withAnimation(.easeInOut(duration: 0.2)) { appState.isMainContentCollapsed = false }
@@ -1577,8 +1557,7 @@ struct PopoutView: View {
             return ("Processing", true, false, false, false)
         }
         if let taskID = tab.linkedTaskID {
-            let tasks = ProjectTasksStorage.tasks(workspacePath: tab.workspacePath)
-            if let task = tasks.first(where: { $0.id == taskID }), task.taskState == .completed {
+            if let task = projectTasksStore.task(for: tab.workspacePath, id: taskID), task.taskState == .completed {
                 return ("Completed", false, false, false, true)
             }
             let status = linkedTaskState(for: tab)
@@ -1723,57 +1702,54 @@ struct PopoutView: View {
         let hiddenTurnTotal = hiddenTurnCount(for: tab)
         return OutputScrollView(
             tab: tab,
-            scrollToken: tab.scrollToken,
-            content: {
-                // Keep the stack eager for reliable append/layout behavior, but mount only the most
-                // recent slice by default so long conversations do not keep every markdown view alive.
-                VStack(alignment: .leading, spacing: 18) {
-                    if tab.turns.isEmpty {
-                        emptyStateContent(tab: tab)
-                    } else {
-                        conversationWindowBar(
-                            tab: tab,
-                            hiddenTurnCount: hiddenTurnTotal,
-                            visibleTurnCount: visibleTurns.count
-                        )
+            scrollToken: tab.scrollToken
+        ) {
+            // Keep the stack eager for reliable append/layout behavior, but mount only the most
+            // recent slice by default so long conversations do not keep every markdown view alive.
+            VStack(alignment: .leading, spacing: 18) {
+                if tab.turns.isEmpty {
+                    emptyStateContent(tab: tab)
+                } else {
+                    conversationWindowBar(
+                        tab: tab,
+                        hiddenTurnCount: hiddenTurnTotal,
+                        visibleTurnCount: visibleTurns.count
+                    )
 
-                        ForEach(visibleTurns) { turn in
-                            ConversationTurnView(turn: turn, workspacePath: tab.workspacePath, screenshotPreviewURL: $screenshotPreviewURL)
-                                .equatable()
-                                .id(turn.id)
-                        }
+                    ForEach(visibleTurns) { turn in
+                        ConversationTurnView(turn: turn, workspacePath: tab.workspacePath, screenshotPreviewURL: $screenshotPreviewURL)
+                            .equatable()
+                            .id(turn.id)
                     }
-
-                    Color.clear
-                        .frame(height: 1)
-                        .id("outputEnd")
                 }
-                .scrollTargetLayout()
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(14)
+
+                Color.clear
+                    .frame(height: 1)
+                    .id("outputEnd")
             }
-        )
+            .scrollTargetLayout()
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(14)
+        }
     }
 
     // MARK: - Composer dock
 
     private func composerDock(tab: AgentTab) -> some View {
         let attachedPaths = screenshotPaths(from: tab.prompt)
+        let displayPrompt = userPromptDisplayText(from: tab.prompt)
         return VStack(alignment: .leading, spacing: 12) {
             HStack(alignment: .center, spacing: 8) {
                 QuickActionButtonsView(
                     commands: quickActionCommands,
                     isDisabled: tab.isRunning,
-                    workspacePath: tab.workspacePath,
                     onCommand: { cmd in
                         if cmd.title == QuickActionCommand.defaultFixBuild.title {
                             _ = addNewAgentTab(initialPrompt: cmd.prompt, lastWorkspacePath: tab.workspacePath, select: true)
                         } else {
                             sendInCurrentTab(prompt: cmd.prompt, tab: tab)
                         }
-                    },
-                    onAdd: {},
-                    onCommandsChanged: { quickActionCommands = QuickActionStorage.commandsForWorkspace(workspacePath: tab.workspacePath) }
+                    }
                 )
                 Spacer()
                 ComposerActionButtonsView(
@@ -1786,7 +1762,7 @@ struct PopoutView: View {
             VStack(alignment: .leading, spacing: 0) {
                 if !attachedPaths.isEmpty {
                     VStack(alignment: .leading, spacing: CursorTheme.spaceS) {
-                        ForEach(Array(attachedPaths.enumerated()), id: \.offset) { _, path in
+                        ForEach(attachedPaths, id: \.self) { path in
                             ScreenshotCardView(
                                 path: path,
                                 workspacePath: tab.workspacePath,
@@ -1836,7 +1812,7 @@ struct PopoutView: View {
                         )
                         .frame(height: composerHeight)
 
-                        if userPromptDisplayText(from: tab.prompt).isEmpty && screenshotPaths(from: tab.prompt).isEmpty {
+                        if displayPrompt.isEmpty && attachedPaths.isEmpty {
                             Text(placeholderText(whenRunning: tab.isRunning))
                                 .font(.system(size: 13, weight: .regular, design: .monospaced))
                                 .foregroundStyle(CursorTheme.textTertiary(for: colorScheme))
@@ -2070,13 +2046,14 @@ struct PopoutView: View {
 
     /// Submit the current prompt: send immediately if idle, or queue to send when agent finishes if running.
     private func submitOrQueuePrompt(tab: AgentTab) {
-        let trimmed = tab.prompt.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return }
-        if tab.isRunning {
-            queueFollowUp(tab: tab)
-            return
-        }
-        sendPrompt(tab: tab)
+        agentSessionStore.submitOrQueuePrompt(
+            tab: tab,
+            selectedModel: selectedModel,
+            incrementUsage: { messagesSentForUsage += 1 },
+            recordHangEvent: recordHangEvent(_:metadata:),
+            updateTabTitle: updateTabTitle(for:in:),
+            requestAutoScroll: requestAutoScroll(for:force:)
+        )
     }
 
     /// Queue the current prompt to be sent as soon as the agent finishes its current response.
@@ -2090,35 +2067,32 @@ struct PopoutView: View {
 
     /// Process the next queued follow-up: set prompt and send. Called from finishStreaming when queue is non-empty.
     private func processNextQueuedFollowUp(tab: AgentTab) {
-        guard let first = tab.followUpQueue.first else { return }
-        tab.followUpQueue.removeFirst()
-        tab.prompt = first.text
-        tab.hasAttachedScreenshot = !screenshotPaths(from: first.text).isEmpty
-        sendPrompt(tab: tab)
+        agentSessionStore.submitOrQueuePrompt(
+            tab: tab,
+            selectedModel: selectedModel,
+            incrementUsage: { messagesSentForUsage += 1 },
+            recordHangEvent: recordHangEvent(_:metadata:),
+            updateTabTitle: updateTabTitle(for:in:),
+            requestAutoScroll: requestAutoScroll(for:force:)
+        )
     }
 
     private static let compressPrompt = "Summarize our entire conversation so far into a single concise summary that preserves key context, decisions, and next steps. Reply with only that summary, no other text."
 
     /// Compress context: ask the agent to summarize the conversation, then replace context with that summary (new chat). If no context, clears instead.
     private func compressContext(tab: AgentTab) {
-        guard !tab.isRunning else { return }
-        let hasContext = !tab.turns.isEmpty || !tab.prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        if !hasContext {
-            clearContext(tab: tab)
-            return
-        }
-        tab.prompt = Self.compressPrompt
-        tab.isCompressRequest = true
-        sendPrompt(tab: tab)
+        agentSessionStore.compressContext(
+            tab: tab,
+            selectedModel: selectedModel,
+            incrementUsage: { messagesSentForUsage += 1 },
+            recordHangEvent: recordHangEvent(_:metadata:),
+            updateTabTitle: updateTabTitle(for:in:),
+            requestAutoScroll: requestAutoScroll(for:force:)
+        )
     }
 
     private func clearContext(tab: AgentTab) {
-        guard !tab.isRunning else { return }
-        tab.turns = []
-        tab.cachedConversationCharacterCount = 0
-        tab.prompt = ""
-        tab.hasAttachedScreenshot = false
-        tab.errorMessage = nil
+        agentSessionStore.clearContext(tab: tab)
     }
 
     private static func fullAssistantText(for turn: ConversationTurn) -> String {
@@ -2167,9 +2141,15 @@ struct PopoutView: View {
     }
 
     private func sendInCurrentTab(prompt: String, tab: AgentTab) {
-        guard !tab.isRunning else { return }
-        tab.prompt = prompt
-        sendPrompt(tab: tab)
+        agentSessionStore.sendInCurrentTab(
+            prompt: prompt,
+            tab: tab,
+            selectedModel: selectedModel,
+            incrementUsage: { messagesSentForUsage += 1 },
+            recordHangEvent: recordHangEvent(_:metadata:),
+            updateTabTitle: updateTabTitle(for:in:),
+            requestAutoScroll: requestAutoScroll(for:force:)
+        )
     }
 
     private func handleDebugAction(tab: AgentTab) {
@@ -2195,165 +2175,23 @@ struct PopoutView: View {
     // MARK: - Streaming
 
     private func sendPrompt(tab currentTab: AgentTab) {
-        let trimmed = currentTab.prompt.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return }
-        recordHangEvent("send-prompt", metadata: [
-            "tabID": currentTab.id.uuidString,
-            "workspacePath": currentTab.workspacePath,
-            "linkedTaskID": currentTab.linkedTaskID?.uuidString ?? "nil",
-            "promptLength": "\(trimmed.count)"
-        ])
-
-        updateTabTitle(for: trimmed, in: currentTab)
-
-        let runID = UUID()
-        let turnID = UUID()
-        if currentTab.isCompressRequest {
-            currentTab.pendingCompressRunID = runID
-            currentTab.isCompressRequest = false
-        }
-        currentTab.streamTask?.cancel()
-        currentTab.errorMessage = nil
-        currentTab.isRunning = true
-        currentTab.activeRunID = runID
-        currentTab.activeTurnID = turnID
-        currentTab.turns.append(ConversationTurn(id: turnID, userPrompt: trimmed, isStreaming: true, wasStopped: false))
-        currentTab.cachedConversationCharacterCount += trimmed.count
-        currentTab.prompt = ""
-        currentTab.hasAttachedScreenshot = false
-        requestAutoScroll(for: currentTab, force: true)
-        messagesSentForUsage += 1
-
-        let task = Task {
-            do {
-                if currentTab.cursorChatId == nil {
-                    let chatId = try AgentRunner.createChat()
-                    guard currentTab.activeRunID == runID else { return }
-                    currentTab.cursorChatId = chatId
-                }
-                let modelToUse = currentTab.modelId ?? selectedModel
-                let stream = try AgentRunner.stream(prompt: trimmed, workspacePath: currentTab.workspacePath, model: modelToUse, conversationId: currentTab.cursorChatId)
-                guard currentTab.activeRunID == runID, currentTab.activeTurnID == turnID else { return }
-                // Coalesce text chunks and flush at ~100ms to reduce main-actor and UI churn during long runs.
-                var thinkingBuffer = ""
-                var assistantBuffer = ""
-                var flushTask: Task<Void, Never>?
-                let flushIntervalNs: UInt64 = 100_000_000 // 100ms
-                func flushBatched() {
-                    let thinking = thinkingBuffer
-                    let assistant = assistantBuffer
-                    thinkingBuffer = ""
-                    assistantBuffer = ""
-                    Task { @MainActor in
-                        if !thinking.isEmpty {
-                            appendThinkingText(thinking, to: turnID, in: currentTab)
-                        }
-                        if !assistant.isEmpty {
-                            mergeAssistantText(assistant, into: currentTab, turnID: turnID)
-                        }
-                        requestAutoScroll(for: currentTab)
-                    }
-                }
-                func scheduleFlush() {
-                    flushTask?.cancel()
-                    flushTask = Task { @MainActor in
-                        try? await Task.sleep(nanoseconds: flushIntervalNs)
-                        guard currentTab.activeRunID == runID, currentTab.activeTurnID == turnID else { return }
-                        flushBatched()
-                        flushTask = nil
-                    }
-                }
-                for try await chunk in stream {
-                    guard currentTab.activeRunID == runID, currentTab.activeTurnID == turnID, !Task.isCancelled else { return }
-                    switch chunk {
-                    case .thinkingDelta(let text):
-                        thinkingBuffer += text
-                        scheduleFlush()
-                    case .thinkingCompleted:
-                        flushBatched()
-                        completeThinking(for: turnID, in: currentTab)
-                        requestAutoScroll(for: currentTab)
-                    case .assistantText(let text):
-                        assistantBuffer += text
-                        scheduleFlush()
-                    case .toolCall(let update):
-                        flushBatched()
-                        mergeToolCall(update, into: currentTab, turnID: turnID)
-                        requestAutoScroll(for: currentTab)
-                    }
-                }
-                flushTask?.cancel()
-                flushBatched()
-                finishStreaming(for: currentTab, runID: runID, turnID: turnID)
-            } catch is CancellationError {
-                finishStreaming(for: currentTab, runID: runID, turnID: turnID)
-            } catch let error as AgentRunnerError {
-                finishStreaming(for: currentTab, runID: runID, turnID: turnID, errorMessage: error.userMessage)
-            } catch {
-                finishStreaming(for: currentTab, runID: runID, turnID: turnID, errorMessage: error.localizedDescription)
-            }
-
-            if currentTab.pendingCompressRunID == runID {
-                Task { @MainActor in
-                    let summary: String
-                    if let idx = currentTab.turns.firstIndex(where: { $0.id == turnID }) {
-                        summary = Self.fullAssistantText(for: currentTab.turns[idx])
-                            .trimmingCharacters(in: .whitespacesAndNewlines)
-                    } else {
-                        summary = ""
-                    }
-                    currentTab.pendingCompressRunID = nil
-                    do {
-                        let newId = try AgentRunner.createChat()
-                        currentTab.cursorChatId = newId
-                        currentTab.turns = []
-                        currentTab.cachedConversationCharacterCount = 0
-                        currentTab.prompt = summary
-                        currentTab.hasAttachedScreenshot = false
-                        currentTab.errorMessage = nil
-                    } catch {
-                        currentTab.errorMessage = (error as? AgentRunnerError)?.userMessage ?? error.localizedDescription
-                    }
-                }
-            }
-
-        }
-
-        currentTab.streamTask = task
+        agentSessionStore.sendPrompt(
+            tab: currentTab,
+            selectedModel: selectedModel,
+            incrementUsage: { messagesSentForUsage += 1 },
+            recordHangEvent: recordHangEvent(_:metadata:),
+            updateTabTitle: updateTabTitle(for:in:),
+            requestAutoScroll: requestAutoScroll(for:force:)
+        )
     }
 
     private func stopStreaming(for currentTab: AgentTab? = nil) {
         guard let tabToStop = currentTab ?? tab else { return }
-        recordHangEvent("stop-streaming", metadata: [
-            "tabID": tabToStop.id.uuidString,
-            "workspacePath": tabToStop.workspacePath,
-            "linkedTaskID": tabToStop.linkedTaskID?.uuidString ?? "nil"
-        ])
-        let turnIndex: Int? = {
-            if let turnID = tabToStop.activeTurnID,
-               let idx = tabToStop.turns.firstIndex(where: { $0.id == turnID }) {
-                return idx
-            }
-            // Fallback: mark last turn as stopped when activeTurnID is missing (e.g. stop during handoff)
-            return tabToStop.turns.indices.last
-        }()
-        if let index = turnIndex {
-            tabToStop.turns[index].isStreaming = false
-            tabToStop.turns[index].lastStreamPhase = nil
-            tabToStop.turns[index].wasStopped = true
-            for segmentIndex in tabToStop.turns[index].segments.indices {
-                if tabToStop.turns[index].segments[segmentIndex].toolCall?.status == .running {
-                    tabToStop.turns[index].segments[segmentIndex].toolCall?.status = .stopped
-                }
-            }
-            notifyTurnsChanged(tabToStop)
-        }
-        tabToStop.activeRunID = nil
-        tabToStop.activeTurnID = nil
-        tabToStop.isRunning = false
-        tabToStop.streamTask?.cancel()
-        tabToStop.streamTask = nil
-        requestAutoScroll(for: tabToStop, force: true)
+        agentSessionStore.stopStreaming(
+            for: tabToStop,
+            recordHangEvent: recordHangEvent(_:metadata:),
+            requestAutoScroll: requestAutoScroll(for:force:)
+        )
     }
 
     private func finishStreaming(for currentTab: AgentTab, runID: UUID, turnID: UUID, errorMessage: String? = nil) {
