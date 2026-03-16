@@ -210,7 +210,7 @@ final class TasksListStore: ObservableObject {
         }
     }
 
-    func commitNewTask(screenshotImages: [NSImage]) {
+    func commitNewTask(screenshotImages: [NSImage], providerID: AgentProviderID) {
         let trimmed = newTaskDraft.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty, !workspacePath.isEmpty else { return }
         recordHangEvent("tasks-commit-new-task", metadata: [
@@ -223,6 +223,7 @@ final class TasksListStore: ObservableObject {
             workspacePath: workspacePath,
             content: trimmed,
             screenshotImages: screenshotImages,
+            providerID: providerID,
             modelId: newTaskModelId,
             taskState: taskState
         )

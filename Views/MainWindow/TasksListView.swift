@@ -101,16 +101,19 @@ private struct CollapsibleGroupingView<Content: View>: View {
 }
 
 struct TasksListView: View {
+    @EnvironmentObject private var appState: AppState
     @Environment(\.colorScheme) private var colorScheme
     let workspacePath: String
     /// When set to true from outside (e.g. Cmd+T), show the add-new-task row and focus it.
     var triggerAddNewTask: Binding<Bool> = .constant(false)
     /// Linked agent status per task ID so the task row can show review/processing state separately from task lifecycle.
     var linkedStatuses: [UUID: AgentTaskState] = [:]
-    /// Models to show in the task model picker (same as input bar).
-    var models: [ModelOption]
-    /// Send task content to a new agent; when taskID is non-nil, the new agent is linked to that task. When screenshotPaths is non-empty, those paths (under .metro) are attached to the prompt. modelId is the task's chosen model (e.g. "auto").
-    var onSendToAgent: (String, UUID?, [String], String) -> Void
+    /// Provider used for new tasks created from this Tasks view.
+    var newTaskProviderID: AgentProviderID
+    /// Returns visible model options for the given provider.
+    var modelsForProvider: (AgentProviderID) -> [ModelOption]
+    /// Send task content to a new agent; when taskID is non-nil, the new agent is linked to that task. When screenshotPaths is non-empty, those paths (under .metro) are attached to the prompt. providerID + modelId capture the task's current agent configuration.
+    var onSendToAgent: (String, UUID?, [String], AgentProviderID, String) -> Void
     /// Open the linked agent for a task when the row represents active or completed agent work.
     var onOpenLinkedAgent: (ProjectTask) -> Void = { _ in }
     /// Continue a stopped agent: focus its tab and send the "continue" prompt.
@@ -156,8 +159,25 @@ struct TasksListView: View {
         store.snapshot
     }
 
+    private func models(for providerID: AgentProviderID) -> [ModelOption] {
+        let available = modelsForProvider(providerID)
+        return available.isEmpty ? AgentProviders.fallbackModels(for: providerID) : available
+    }
+
+    private func syncNewTaskModelSelection() {
+        let available = models(for: newTaskProviderID)
+        guard let fallback = available.first else { return }
+        if !available.contains(where: { $0.id == store.newTaskModelId }) {
+            store.newTaskModelId = fallback.id
+        }
+    }
+
     private func commitNewTask() {
-        store.commitNewTask(screenshotImages: newTaskDraftScreenshots.map(\.image))
+        syncNewTaskModelSelection()
+        store.commitNewTask(
+            screenshotImages: newTaskDraftScreenshots.map(\.image),
+            providerID: newTaskProviderID
+        )
         newTaskDraftScreenshots = []
         isNewTaskFieldFocused = false
     }
@@ -192,6 +212,7 @@ struct TasksListView: View {
         store.showNewTaskComposer(selecting: tab)
         newTaskDraftScreenshots = []
         taskScreenshotPreviewImage = nil
+        syncNewTaskModelSelection()
     }
 
     private func selectTasksTab(_ tab: TasksListTab) {
@@ -241,14 +262,24 @@ struct TasksListView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .onAppear {
             reloadTasks()
+            syncNewTaskModelSelection()
             // Handle Cmd+T when it fired before this view was in the hierarchy (trigger already true).
             if triggerAddNewTask.wrappedValue {
                 showNewTaskComposer(selecting: .inProgress)
                 triggerAddNewTask.wrappedValue = false
             }
         }
-        .onChange(of: workspacePath) { _, _ in reloadTasks() }
+        .onChange(of: workspacePath) { _, _ in
+            reloadTasks()
+            syncNewTaskModelSelection()
+        }
         .onChange(of: linkedStatuses) { _, newStatuses in store.updateLinkedStatuses(newStatuses) }
+        .onChange(of: newTaskProviderID) { _, _ in
+            syncNewTaskModelSelection()
+        }
+        .onChange(of: appState.selectedAgentProviderID) { _, _ in
+            syncNewTaskModelSelection()
+        }
         .onChange(of: triggerAddNewTask.wrappedValue) { _, requested in
             if requested {
                 showNewTaskComposer(selecting: .inProgress)
@@ -582,7 +613,7 @@ struct TasksListView: View {
         TaskRowView(
             task: task,
             workspacePath: workspacePath,
-            models: models,
+            models: models(for: task.providerID),
             agentTaskState: linkedStatuses[task.id] ?? .none,
             isEditing: store.editingTask?.id == task.id,
             editDraft: $store.editingDraft,
@@ -606,7 +637,7 @@ struct TasksListView: View {
                 store.toggleTaskCompletion(task)
                 onTasksDidUpdate()
             },
-            onSendToAgent: { onSendToAgent(task.content, task.id, task.screenshotPaths, task.modelId) },
+            onSendToAgent: { onSendToAgent(task.content, task.id, task.screenshotPaths, task.providerID, task.modelId) },
             onModelChange: { newId in
                 store.updateTaskModel(task, modelId: newId)
             },
@@ -840,7 +871,7 @@ struct TasksListView: View {
             HStack(alignment: .center, spacing: CursorTheme.spaceS + CursorTheme.spaceXXS) {
                 ModelPickerView(
                     selectedModelId: store.newTaskModelId,
-                    models: models,
+                    models: models(for: newTaskProviderID),
                     onSelect: { store.newTaskModelId = $0 }
                 )
             }
@@ -965,7 +996,9 @@ private struct TaskRowView: View {
     /// When true, show model picker; when false, show read-only chip (no dropdown).
     private var canEditAgentModel: Bool { !isProcessing && !isStopped }
     private var selectedModel: ModelOption {
-        models.first { $0.id == task.modelId } ?? ModelOption(id: AvailableModels.autoID, label: "Auto", isPremium: false)
+        models.first { $0.id == task.modelId }
+            ?? AgentProviders.fallbackModels(for: task.providerID).first
+            ?? ModelOption(id: AvailableModels.autoID, label: "Auto", isPremium: false)
     }
 
     /// Trailing controls (screenshot strip + 3-dot menu) shown in an overlay so they sit exactly halfway down the card.

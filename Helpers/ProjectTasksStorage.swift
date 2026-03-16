@@ -23,6 +23,8 @@ struct ProjectTask: Identifiable, Codable, Equatable {
     var deletedAt: Date?
     /// Relative paths under .metro (e.g. "screenshots/<id>_0.png") for task screenshots. Empty = no screenshots.
     var screenshotPaths: [String]
+    /// Agent provider to use when delegating this task.
+    var providerID: AgentProviderID
     /// Model ID to use when sending this task to an agent (e.g. "auto", "gpt-5.4-medium"). Defaults to Auto.
     var modelId: String
     /// Preserves the last non-deleted state so soft-deleted tasks can be restored.
@@ -44,6 +46,7 @@ struct ProjectTask: Identifiable, Codable, Equatable {
         deleted: Bool = false,
         deletedAt: Date? = nil,
         screenshotPaths: [String] = [],
+        providerID: AgentProviderID = .cursor,
         modelId: String = AvailableModels.autoID,
         backlog: Bool = false,
         preDeletionTaskState: TaskState? = nil,
@@ -56,13 +59,14 @@ struct ProjectTask: Identifiable, Codable, Equatable {
         self.completedAt = completedAt
         self.deletedAt = deletedAt
         self.screenshotPaths = screenshotPaths
+        self.providerID = providerID
         self.modelId = modelId
         self.preDeletionTaskState = preDeletionTaskState
         self.agentTabID = agentTabID
     }
 
     enum CodingKeys: String, CodingKey {
-        case id, content, createdAt, taskState, completed, completedAt, deleted, deletedAt, screenshotPath, screenshotPaths, modelId, backlog, preDeletionTaskState, agentTabID
+        case id, content, createdAt, taskState, completed, completedAt, deleted, deletedAt, screenshotPath, screenshotPaths, providerID, modelId, backlog, preDeletionTaskState, agentTabID
     }
 
     private static func migratedTaskState(completed: Bool, deleted: Bool, backlog: Bool) -> TaskState {
@@ -91,6 +95,7 @@ struct ProjectTask: Identifiable, Codable, Equatable {
         } else {
             screenshotPaths = []
         }
+        providerID = try c.decodeIfPresent(AgentProviderID.self, forKey: .providerID) ?? .cursor
         modelId = try c.decodeIfPresent(String.self, forKey: .modelId) ?? AvailableModels.autoID
         preDeletionTaskState = try c.decodeIfPresent(TaskState.self, forKey: .preDeletionTaskState)
         agentTabID = try c.decodeIfPresent(UUID.self, forKey: .agentTabID)
@@ -107,6 +112,7 @@ struct ProjectTask: Identifiable, Codable, Equatable {
         try c.encode(deleted, forKey: .deleted)
         try c.encodeIfPresent(deletedAt, forKey: .deletedAt)
         try c.encode(screenshotPaths, forKey: .screenshotPaths)
+        try c.encode(providerID, forKey: .providerID)
         try c.encode(modelId, forKey: .modelId)
         try c.encode(backlog, forKey: .backlog)
         try c.encodeIfPresent(preDeletionTaskState, forKey: .preDeletionTaskState)
@@ -252,9 +258,9 @@ enum ProjectTasksStorage {
             .sorted { ($0.deletedAt ?? .distantPast) >= ($1.deletedAt ?? .distantPast) }
     }
 
-    static func addTask(workspacePath: String, content: String, screenshotImages: [NSImage] = [], modelId: String = AvailableModels.autoID, taskState: TaskState = .inProgress) -> ProjectTask {
+    static func addTask(workspacePath: String, content: String, screenshotImages: [NSImage] = [], providerID: AgentProviderID = .cursor, modelId: String = AvailableModels.autoID, taskState: TaskState = .inProgress) -> ProjectTask {
         var file = load(workspacePath: workspacePath)
-        var task = ProjectTask(content: content, taskState: taskState, modelId: modelId)
+        var task = ProjectTask(content: content, taskState: taskState, providerID: providerID, modelId: modelId)
         let dir = screenshotsDirectoryURL(workspacePath: workspacePath)
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         var paths: [String] = []
@@ -274,11 +280,12 @@ enum ProjectTasksStorage {
         return task
     }
 
-    static func updateTask(workspacePath: String, id: UUID, content: String? = nil, taskState: TaskState? = nil, modelId: String? = nil) {
+    static func updateTask(workspacePath: String, id: UUID, content: String? = nil, taskState: TaskState? = nil, providerID: AgentProviderID? = nil, modelId: String? = nil) {
         var file = load(workspacePath: workspacePath)
         guard let index = file.tasks.firstIndex(where: { $0.id == id }) else { return }
         if let content = content { file.tasks[index].content = content }
         if let taskState { setTaskState(taskState, for: &file.tasks[index]) }
+        if let providerID { file.tasks[index].providerID = providerID }
         if let modelId = modelId { file.tasks[index].modelId = modelId }
         save(workspacePath: workspacePath, file)
     }

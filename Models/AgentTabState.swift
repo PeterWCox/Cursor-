@@ -18,12 +18,14 @@ struct SavedAgentTab: Codable {
     var followUpQueue: [QueuedFollowUp]
     /// When set, this agent is linked to a project task; used to show task status (open / processing / done) in the sidebar.
     var linkedTaskID: UUID?
-    /// Cursor backend conversation ID; when set, used with --resume to continue the same conversation after restart.
-    var cursorChatId: String?
+    /// Agent provider used for this tab (e.g. Cursor now, Claude Code later).
+    var providerID: AgentProviderID
+    /// Provider conversation ID; when set, used to continue the same conversation after restart.
+    var conversationID: String?
     /// Model ID for this tab (e.g. "auto", "gpt-5.4-medium"). When set, used when sending; otherwise app default is used.
     var modelId: String?
 
-    init(id: UUID, title: String, workspacePath: String, currentBranch: String, prompt: String, turns: [ConversationTurn], hasAttachedScreenshot: Bool, followUpQueue: [QueuedFollowUp], linkedTaskID: UUID? = nil, cursorChatId: String? = nil, modelId: String? = nil) {
+    init(id: UUID, title: String, workspacePath: String, currentBranch: String, prompt: String, turns: [ConversationTurn], hasAttachedScreenshot: Bool, followUpQueue: [QueuedFollowUp], linkedTaskID: UUID? = nil, providerID: AgentProviderID = .cursor, conversationID: String? = nil, modelId: String? = nil) {
         self.id = id
         self.title = title
         self.workspacePath = workspacePath
@@ -33,7 +35,8 @@ struct SavedAgentTab: Codable {
         self.hasAttachedScreenshot = hasAttachedScreenshot
         self.followUpQueue = followUpQueue
         self.linkedTaskID = linkedTaskID
-        self.cursorChatId = cursorChatId
+        self.providerID = providerID
+        self.conversationID = conversationID
         self.modelId = modelId
     }
 
@@ -48,12 +51,30 @@ struct SavedAgentTab: Codable {
         hasAttachedScreenshot = try c.decode(Bool.self, forKey: .hasAttachedScreenshot)
         followUpQueue = try c.decode([QueuedFollowUp].self, forKey: .followUpQueue)
         linkedTaskID = try c.decodeIfPresent(UUID.self, forKey: .linkedTaskID)
-        cursorChatId = try c.decodeIfPresent(String.self, forKey: .cursorChatId)
+        providerID = try c.decodeIfPresent(AgentProviderID.self, forKey: .providerID) ?? .cursor
+        conversationID = try c.decodeIfPresent(String.self, forKey: .conversationID)
+            ?? c.decodeIfPresent(String.self, forKey: .cursorChatId)
         modelId = try c.decodeIfPresent(String.self, forKey: .modelId)
     }
 
     private enum CodingKeys: String, CodingKey {
-        case id, title, workspacePath, currentBranch, prompt, turns, hasAttachedScreenshot, followUpQueue, linkedTaskID, cursorChatId, modelId
+        case id, title, workspacePath, currentBranch, prompt, turns, hasAttachedScreenshot, followUpQueue, linkedTaskID, providerID, conversationID, cursorChatId, modelId
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(id, forKey: .id)
+        try c.encode(title, forKey: .title)
+        try c.encode(workspacePath, forKey: .workspacePath)
+        try c.encode(currentBranch, forKey: .currentBranch)
+        try c.encode(prompt, forKey: .prompt)
+        try c.encode(turns, forKey: .turns)
+        try c.encode(hasAttachedScreenshot, forKey: .hasAttachedScreenshot)
+        try c.encode(followUpQueue, forKey: .followUpQueue)
+        try c.encodeIfPresent(linkedTaskID, forKey: .linkedTaskID)
+        try c.encode(providerID, forKey: .providerID)
+        try c.encodeIfPresent(conversationID, forKey: .conversationID)
+        try c.encodeIfPresent(modelId, forKey: .modelId)
     }
 
     /// Streaming work cannot survive an app relaunch, so restore persisted turns as settled state.
@@ -203,6 +224,7 @@ class TerminalTab: ObservableObject, Identifiable {
 class AgentTab: ObservableObject, Identifiable {
     let id: UUID
     @Published var title: String
+    @Published var providerID: AgentProviderID
     /// Project/workspace path for this tab. When creating a new tab, it is set to the last-used path (e.g. the active tab’s workspace).
     @Published var workspacePath: String = ""
     /// Last-known git branch for this tab’s workspace (kept in sync when tab is active or on switch).
@@ -226,8 +248,8 @@ class AgentTab: ObservableObject, Identifiable {
     var lastAutoScrollAt: TimeInterval = 0
     /// Last time we pushed a streaming UI update; used to throttle to ~100ms.
     var lastStreamUIUpdateAt: TimeInterval = 0
-    /// Cursor CLI chat ID for this tab; set after first message so follow-ups use the same conversation.
-    var cursorChatId: String?
+    /// Provider conversation ID for this tab; set after first message so follow-ups use the same conversation.
+    var conversationID: String?
 
     /// If set, the run with this ID is a "compress context" run; when it finishes we replace context with the assistant's summary.
     var pendingCompressRunID: UUID?
@@ -237,9 +259,10 @@ class AgentTab: ObservableObject, Identifiable {
     /// Turn IDs the user has dismissed from the pinned-questions stack (not persisted).
     @Published var dismissedPinnedTurnIDs: Set<UUID> = []
 
-    init(title: String = "Agent", workspacePath: String = "") {
+    init(title: String = "Agent", workspacePath: String = "", providerID: AgentProviderID = .cursor) {
         self.id = UUID()
         self.title = title
+        self.providerID = providerID
         self.workspacePath = workspacePath
         self.cachedConversationCharacterCount = 0
     }
@@ -254,7 +277,8 @@ class AgentTab: ObservableObject, Identifiable {
         self.hasAttachedScreenshot = saved.hasAttachedScreenshot
         self.followUpQueue = saved.followUpQueue
         self.linkedTaskID = saved.linkedTaskID
-        self.cursorChatId = saved.cursorChatId
+        self.providerID = saved.providerID
+        self.conversationID = saved.conversationID
         self.modelId = saved.modelId
         self.cachedConversationCharacterCount = Self.conversationCharacterCount(for: saved.restoredTurns)
     }
@@ -270,7 +294,8 @@ class AgentTab: ObservableObject, Identifiable {
             hasAttachedScreenshot: hasAttachedScreenshot,
             followUpQueue: followUpQueue,
             linkedTaskID: linkedTaskID,
-            cursorChatId: cursorChatId,
+            providerID: providerID,
+            conversationID: conversationID,
             modelId: modelId
         )
     }
@@ -511,14 +536,14 @@ class TabManager: ObservableObject {
 
     /// Adds a new tab under the selected or supplied project. When `select` is false, the new tab is created but the current selection (e.g. Tasks view or another tab) is left unchanged.
     @discardableResult
-    func addTab(initialPrompt: String? = nil, workspacePath: String? = nil, modelId: String? = nil, select: Bool = true) -> AgentTab? {
+    func addTab(initialPrompt: String? = nil, workspacePath: String? = nil, modelId: String? = nil, providerID: AgentProviderID = .cursor, select: Bool = true) -> AgentTab? {
         let path = workspacePath ?? activeProjectPath ?? activeTab?.workspacePath ?? ""
         let resolved = path.trimmingCharacters(in: .whitespacesAndNewlines)
         guard Self.workspacePathExists(resolved) else { return nil }
 
         addProject(path: resolved, select: select)
 
-        let tab = AgentTab(title: "Agent \(tabs.count + 1)", workspacePath: resolved)
+        let tab = AgentTab(title: "Agent \(tabs.count + 1)", workspacePath: resolved, providerID: providerID)
         if let prompt = initialPrompt, !prompt.isEmpty {
             tab.prompt = prompt
         }

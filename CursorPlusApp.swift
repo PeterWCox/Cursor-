@@ -670,6 +670,7 @@ final class HangDiagnostics {
 class AppState: ObservableObject {
     @AppStorage("workspacePath") var workspacePath: String = FileManager.default.homeDirectoryForCurrentUser.path
     @AppStorage(AppPreferences.projectsRootPathKey) var projectsRootPath: String = AppPreferences.defaultProjectsRootPath
+    @AppStorage(AppPreferences.selectedAgentProviderKey) var selectedAgentProviderRawValue: String = AgentProviders.defaultProviderID.rawValue
     @Published var showSettingsSheet: Bool = false
     /// Incremented when tasks are updated (e.g. completed) so the sidebar can hide agent tabs for completed tasks.
     @Published var taskListRevision: UUID = UUID()
@@ -682,24 +683,57 @@ class AppState: ObservableObject {
     /// When true, main agent content is hidden and panel is resized to sidebar-only width.
     @Published var isMainContentCollapsed: Bool = false
     @Published private(set) var openProjectCount: Int = 0
-    /// Available agent models (from CLI when loaded; otherwise fallback). Refreshed on launch.
-    @Published var availableModels: [ModelOption] = AvailableModels.fallback
+    /// Available agent models keyed by provider; falls back to provider defaults until loaded.
+    @Published private var availableModelsByProvider: [AgentProviderID: [ModelOption]] = [
+        .cursor: AgentProviders.fallbackModels(for: .cursor),
+        .claudeCode: AgentProviders.fallbackModels(for: .claudeCode)
+    ]
     let tabManager: TabManager
     private var cancellables = Set<AnyCancellable>()
 
+    var selectedAgentProviderID: AgentProviderID {
+        AgentProviders.resolvedProviderID(selectedAgentProviderRawValue)
+    }
+
+    var availableModels: [ModelOption] {
+        availableModels(for: selectedAgentProviderID)
+    }
+
+    func availableModels(for providerID: AgentProviderID) -> [ModelOption] {
+        availableModelsByProvider[providerID] ?? AgentProviders.fallbackModels(for: providerID)
+    }
+
+    func defaultModelID(for providerID: AgentProviderID) -> String {
+        AgentProviders.defaultModelID(for: providerID)
+    }
+
     func loadModelsFromCLI() {
+        loadModels(for: selectedAgentProviderID)
+    }
+
+    func loadModels(for providerID: AgentProviderID) {
+        let provider = AgentProviders.provider(for: providerID)
         Task { @MainActor in
-            guard let models = try? await AgentRunner.listModels(), !models.isEmpty else { return }
-            availableModels = models
+            guard let models = try? await provider.listModels(), !models.isEmpty else { return }
+            availableModelsByProvider[providerID] = models
         }
     }
 
     func visibleModels(disabledIds: Set<String>) -> [ModelOption] {
-        AvailableModels.visible(from: availableModels, disabledIds: disabledIds)
+        visibleModels(for: selectedAgentProviderID, disabledIds: disabledIds)
     }
 
-    func model(for id: String) -> ModelOption? {
-        AvailableModels.model(for: id, in: availableModels)
+    func visibleModels(for providerID: AgentProviderID, disabledIds: Set<String>) -> [ModelOption] {
+        AvailableModels.visible(from: availableModels(for: providerID), disabledIds: disabledIds)
+    }
+
+    func model(for id: String, providerID: AgentProviderID? = nil) -> ModelOption? {
+        let resolvedProviderID = providerID ?? selectedAgentProviderID
+        return AvailableModels.model(for: id, in: availableModels(for: resolvedProviderID))
+    }
+
+    func isDefaultShown(modelId: String, for providerID: AgentProviderID) -> Bool {
+        AgentProviders.defaultShownModelIds(for: providerID).contains(modelId)
     }
 
     init() {

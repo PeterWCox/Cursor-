@@ -347,6 +347,7 @@ private struct ProjectsSettingsPaneContent: View {
 private struct ModelsSettingsPaneContent: View {
     @Environment(\.colorScheme) private var colorScheme
     @EnvironmentObject var appState: AppState
+    @AppStorage(AppPreferences.selectedAgentProviderKey) private var selectedAgentProviderRawValue: String = AgentProviders.defaultProviderID.rawValue
     @AppStorage(AppPreferences.disabledModelIdsKey) private var disabledModelIdsRaw: String = AppPreferences.defaultDisabledModelIdsRaw
     @State private var modelSearchText: String = ""
     @State private var showAllModels: Bool = false
@@ -356,13 +357,18 @@ private struct ModelsSettingsPaneContent: View {
     }
 
     private func effectiveDisabled() -> Set<String> {
-        AppPreferences.effectiveDisabledModelIds(allIds: allModelIds, raw: disabledModelIdsRaw)
+        AppPreferences.effectiveDisabledModelIds(
+            allIds: allModelIds,
+            raw: disabledModelIdsRaw,
+            defaultEnabledModelIds: AgentProviders.defaultEnabledModelIds(for: appState.selectedAgentProviderID),
+            defaultModelID: AgentProviders.defaultModelID(for: appState.selectedAgentProviderID)
+        )
     }
 
     private var displayedModels: [ModelOption] {
         var list = showAllModels
             ? appState.availableModels
-            : appState.availableModels.filter { AvailableModels.isDefaultShown(modelId: $0.id) }
+            : appState.availableModels.filter { appState.isDefaultShown(modelId: $0.id, for: appState.selectedAgentProviderID) }
         let search = modelSearchText.trimmingCharacters(in: .whitespaces).lowercased()
         if !search.isEmpty {
             list = list.filter {
@@ -374,6 +380,27 @@ private struct ModelsSettingsPaneContent: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 24) {
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Agent provider")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(CursorTheme.textTertiary(for: colorScheme))
+                    .textCase(.uppercase)
+                    .tracking(0.6)
+
+                Text("Choose which CLI powers new agents and determines the model list shown below.")
+                    .font(.system(size: 14))
+                    .foregroundStyle(CursorTheme.textSecondary(for: colorScheme))
+                    .fixedSize(horizontal: false, vertical: true)
+
+                Picker("", selection: $selectedAgentProviderRawValue) {
+                    ForEach(AgentProviderID.allCases) { providerID in
+                        Text(providerID.displayName).tag(providerID.rawValue)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .frame(maxWidth: 280)
+            }
+
             // Search and refresh
             HStack(spacing: 8) {
                 TextField("Search models...", text: $modelSearchText)
@@ -438,6 +465,14 @@ private struct ModelsSettingsPaneContent: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+        .onAppear {
+            appState.loadModels(for: appState.selectedAgentProviderID)
+        }
+        .onChange(of: selectedAgentProviderRawValue) { _, _ in
+            showAllModels = false
+            modelSearchText = ""
+            appState.loadModels(for: appState.selectedAgentProviderID)
+        }
     }
 }
 
@@ -454,7 +489,7 @@ private struct AboutPaneContent: View {
                 .foregroundStyle(CursorTheme.textSecondary(for: colorScheme))
                 .fixedSize(horizontal: false, vertical: true)
 
-            Image("CursorPlusLogo")
+            Image("CursorMetroLogo")
                 .resizable()
                 .aspectRatio(contentMode: .fit)
                 .frame(height: 44)

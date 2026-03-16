@@ -65,6 +65,7 @@ final class ProjectTasksStore: ObservableObject {
         workspacePath: String,
         content: String,
         screenshotImages: [NSImage] = [],
+        providerID: AgentProviderID = .cursor,
         modelId: String = AvailableModels.autoID,
         taskState: TaskState = .inProgress
     ) -> ProjectTask {
@@ -72,6 +73,7 @@ final class ProjectTasksStore: ObservableObject {
             workspacePath: workspacePath,
             content: content,
             screenshotImages: screenshotImages,
+            providerID: providerID,
             modelId: modelId,
             taskState: taskState
         )
@@ -79,8 +81,8 @@ final class ProjectTasksStore: ObservableObject {
         return task
     }
 
-    func updateTask(workspacePath: String, id: UUID, content: String? = nil, taskState: TaskState? = nil, modelId: String? = nil) {
-        ProjectTasksStorage.updateTask(workspacePath: workspacePath, id: id, content: content, taskState: taskState, modelId: modelId)
+    func updateTask(workspacePath: String, id: UUID, content: String? = nil, taskState: TaskState? = nil, providerID: AgentProviderID? = nil, modelId: String? = nil) {
+        ProjectTasksStorage.updateTask(workspacePath: workspacePath, id: id, content: content, taskState: taskState, providerID: providerID, modelId: modelId)
         reload(workspacePath: workspacePath)
     }
 

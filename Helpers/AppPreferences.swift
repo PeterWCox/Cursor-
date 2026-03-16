@@ -31,6 +31,7 @@ enum AppPreferences {
     static let projectsRootPathKey = "projectsRootPath"
     static let preferredTerminalAppKey = "preferredTerminalApp"
     static let preferredAppearanceKey = "preferredAppearance"
+    static let selectedAgentProviderKey = "selectedAgentProvider"
     /// Key for placing the agent tabs sidebar and logo on the right (mirrored layout). Persisted via UserDefaults.
     static let sidebarOnRightKey = "sidebarOnRight"
     /// Key for model IDs to hide from the model picker. Persisted via UserDefaults when used with @AppStorage.
@@ -68,11 +69,16 @@ enum AppPreferences {
         disabledIds.sorted().joined(separator: ",")
     }
 
-    /// Effective disabled set: when raw is empty (first run), only default-enabled models (+ auto) are visible.
-    static func effectiveDisabledModelIds(allIds: Set<String>, raw: String) -> Set<String> {
+    /// Effective disabled set: when raw is empty (first run), only the provider's default-enabled models remain visible.
+    static func effectiveDisabledModelIds(
+        allIds: Set<String>,
+        raw: String,
+        defaultEnabledModelIds: Set<String>,
+        defaultModelID: String
+    ) -> Set<String> {
         let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         if trimmed.isEmpty {
-            let enabled = AvailableModels.defaultEnabledModelIds.union([AvailableModels.autoID])
+            let enabled = defaultEnabledModelIds.union([defaultModelID])
             return allIds.subtracting(enabled)
         }
         return disabledModelIds(from: raw)

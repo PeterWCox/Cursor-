@@ -165,19 +165,21 @@ final class AgentSessionStore: ObservableObject {
 
         let task = Task {
             do {
-                if currentTab.cursorChatId == nil {
-                    let chatId = try AgentRunner.createChat()
+                let provider = AgentProviders.provider(for: currentTab.providerID)
+
+                if currentTab.conversationID == nil, currentTab.providerID != .claudeCode {
+                    let chatId = try provider.createConversation()
                     guard currentTab.activeRunID == runID else { return }
-                    currentTab.cursorChatId = chatId
+                    currentTab.conversationID = chatId
                 }
 
                 let modelToUse = currentTab.modelId ?? selectedModel
-                let stream = try AgentRunner.stream(
+                let stream = try provider.stream(request: AgentStreamRequest(
                     prompt: trimmed,
                     workspacePath: currentTab.workspacePath,
-                    model: modelToUse,
-                    conversationId: currentTab.cursorChatId
-                )
+                    modelID: modelToUse,
+                    conversationID: currentTab.conversationID
+                ))
 
                 guard currentTab.activeRunID == runID, currentTab.activeTurnID == turnID else { return }
 
@@ -215,6 +217,8 @@ final class AgentSessionStore: ObservableObject {
                 for try await chunk in stream {
                     guard currentTab.activeRunID == runID, currentTab.activeTurnID == turnID, !Task.isCancelled else { return }
                     switch chunk {
+                    case .conversationIDUpdated(let conversationID):
+                        currentTab.conversationID = conversationID
                     case .thinkingDelta(let text):
                         thinkingBuffer += text
                         scheduleFlush()
@@ -257,7 +261,7 @@ final class AgentSessionStore: ObservableObject {
                     updateTabTitle: updateTabTitle,
                     requestAutoScroll: requestAutoScroll
                 )
-            } catch let error as AgentRunnerError {
+            } catch let error as AgentProviderError {
                 finishStreaming(
                     for: currentTab,
                     runID: runID,
@@ -296,15 +300,20 @@ final class AgentSessionStore: ObservableObject {
                     currentTab.pendingCompressRunID = nil
 
                     do {
-                        let newId = try AgentRunner.createChat()
-                        currentTab.cursorChatId = newId
+                        if currentTab.providerID == .claudeCode {
+                            currentTab.conversationID = nil
+                        } else {
+                            let provider = AgentProviders.provider(for: currentTab.providerID)
+                            let newId = try provider.createConversation()
+                            currentTab.conversationID = newId
+                        }
                         currentTab.turns = []
                         currentTab.cachedConversationCharacterCount = 0
                         currentTab.prompt = summary
                         currentTab.hasAttachedScreenshot = false
                         currentTab.errorMessage = nil
                     } catch {
-                        currentTab.errorMessage = (error as? AgentRunnerError)?.userMessage ?? error.localizedDescription
+                        currentTab.errorMessage = (error as? AgentProviderError)?.userMessage ?? error.localizedDescription
                     }
                 }
             }

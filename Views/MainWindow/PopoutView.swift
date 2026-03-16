@@ -180,8 +180,9 @@ private struct PopoutTasksListContent: View {
     let tasksPath: String
     @Binding var triggerAddNewTask: Bool
     let linkedStatuses: [UUID: AgentTaskState]
-    let models: [ModelOption]
-    let onSendToAgent: (String, UUID?, [String], String) -> Void
+    let newTaskProviderID: AgentProviderID
+    let modelsForProvider: (AgentProviderID) -> [ModelOption]
+    let onSendToAgent: (String, UUID?, [String], AgentProviderID, String) -> Void
     let onOpenLinkedAgent: (ProjectTask) -> Void
     let onContinueAgent: (ProjectTask) -> Void
     let onResetAgent: (ProjectTask) -> Void
@@ -196,7 +197,8 @@ private struct PopoutTasksListContent: View {
             workspacePath: tasksPath,
             triggerAddNewTask: $triggerAddNewTask,
             linkedStatuses: linkedStatuses,
-            models: models,
+            newTaskProviderID: newTaskProviderID,
+            modelsForProvider: modelsForProvider,
             onSendToAgent: onSendToAgent,
             onOpenLinkedAgent: onOpenLinkedAgent,
             onContinueAgent: onContinueAgent,
@@ -214,12 +216,12 @@ private struct PopoutTasksListContent: View {
 }
 
 /// Sidebar logo: loads from bundle so we can fall back when asset is missing (avoids green placeholder). Uses original rendering so the logo art shows.
-private struct CursorPlusLogoView: View {
+private struct CursorMetroLogoView: View {
     let height: CGFloat
     let projectColor: Color
 
     var body: some View {
-        if let nsImage = NSImage(named: "CursorPlusLogo") {
+        if let nsImage = NSImage(named: "CursorMetroLogo") {
             Image(nsImage: nsImage)
                 .resizable()
                 .renderingMode(.original)
@@ -230,6 +232,82 @@ private struct CursorPlusLogoView: View {
                 .resizable()
                 .aspectRatio(contentMode: .fit)
                 .frame(height: height)
+        }
+    }
+}
+
+/// Sidebar logo for the Claude provider. Tries to load a "ClaudeMetroLogo" asset first; falls back to a programmatic rendering.
+private struct ClaudeMetroLogoView: View {
+    let height: CGFloat
+
+    var body: some View {
+        if let nsImage = NSImage(named: "ClaudeMetroLogo") {
+            Image(nsImage: nsImage)
+                .resizable()
+                .renderingMode(.original)
+                .aspectRatio(contentMode: .fit)
+                .frame(height: height)
+        } else {
+            HStack(spacing: height * 0.22) {
+                // Anthropic-style icon: three upward-radiating lines
+                AnthropicIconShape()
+                    .fill(.white)
+                    .frame(width: height * 0.72, height: height * 0.72)
+                VStack(alignment: .leading, spacing: 0) {
+                    Text("CLAUDE")
+                        .font(.system(size: height * 0.38, weight: .bold, design: .default))
+                        .foregroundStyle(.white)
+                        .tracking(0.5)
+                    Text("Metro")
+                        .font(.system(size: height * 0.24, weight: .regular, design: .default))
+                        .foregroundStyle(.white.opacity(0.75))
+                }
+            }
+        }
+    }
+}
+
+/// Simplified Anthropic logo mark: three thick rounded rays emanating upward from a base, forming a stylised "A" silhouette.
+private struct AnthropicIconShape: Shape {
+    func path(in rect: CGRect) -> Path {
+        var p = Path()
+        let w = rect.width
+        let h = rect.height
+        let rayW = w * 0.18
+        let rayR = rayW / 2
+
+        // Left ray (tilted left)
+        func addRay(_ path: inout Path, cx: CGFloat, topY: CGFloat, botY: CGFloat) {
+            path.move(to: CGPoint(x: cx - rayR, y: botY))
+            path.addLine(to: CGPoint(x: cx - rayR, y: topY + rayR))
+            path.addArc(center: CGPoint(x: cx, y: topY + rayR), radius: rayR, startAngle: .degrees(180), endAngle: .degrees(0), clockwise: false)
+            path.addLine(to: CGPoint(x: cx + rayR, y: botY))
+            path.closeSubpath()
+        }
+
+        // Left ray
+        addRay(&p, cx: w * 0.22, topY: h * 0.05, botY: h * 0.88)
+        // Centre ray
+        addRay(&p, cx: w * 0.5, topY: h * 0.0, botY: h * 0.88)
+        // Right ray
+        addRay(&p, cx: w * 0.78, topY: h * 0.05, botY: h * 0.88)
+
+        return p
+    }
+}
+
+/// Routes to the correct sidebar logo based on the active agent provider.
+private struct SidebarLogoView: View {
+    let height: CGFloat
+    let projectColor: Color
+    let providerID: AgentProviderID
+
+    var body: some View {
+        switch providerID {
+        case .claudeCode:
+            ClaudeMetroLogoView(height: height)
+        case .cursor:
+            CursorMetroLogoView(height: height, projectColor: projectColor)
         }
     }
 }
@@ -564,6 +642,7 @@ struct PopoutView: View {
             prompt: task.content,
             taskID: task.id,
             screenshotPaths: task.screenshotPaths,
+            providerID: task.providerID,
             modelId: task.modelId,
             workspacePath: workspacePath,
             selectAgent: true
@@ -576,7 +655,15 @@ struct PopoutView: View {
         sendInCurrentTab(prompt: "continue", tab: tab)
     }
 
-    private func sendTaskToAgent(prompt: String, taskID: UUID, screenshotPaths: [String], modelId: String, workspacePath: String, selectAgent: Bool = false) {
+    private func sendTaskToAgent(
+        prompt: String,
+        taskID: UUID,
+        screenshotPaths: [String],
+        providerID: AgentProviderID,
+        modelId: String,
+        workspacePath: String,
+        selectAgent: Bool = false
+    ) {
         recordHangEvent("queue-agent", metadata: [
             "workspacePath": workspacePath,
             "taskID": taskID.uuidString,
@@ -601,6 +688,7 @@ struct PopoutView: View {
             initialPrompt: initialPrompt,
             lastWorkspacePath: workspacePath,
             modelId: modelId,
+            providerID: providerID,
             select: selectAgent
         ) {
             newTab.linkedTaskID = taskID
@@ -611,16 +699,29 @@ struct PopoutView: View {
         }
     }
 
-    private func createLinkedTaskAndAgent(taskContent: String, agentPrompt: String? = nil, workspacePath: String, modelId: String = AvailableModels.autoID, selectAgent: Bool = true) {
+    private func createLinkedTaskAndAgent(
+        taskContent: String,
+        agentPrompt: String? = nil,
+        workspacePath: String,
+        providerID: AgentProviderID,
+        modelId: String,
+        selectAgent: Bool = true
+    ) {
         let trimmedTaskContent = taskContent.trimmingCharacters(in: .whitespacesAndNewlines)
         let trimmedAgentPrompt = (agentPrompt ?? taskContent).trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedTaskContent.isEmpty, !trimmedAgentPrompt.isEmpty else { return }
 
-        let task = projectTasksStore.addTask(workspacePath: workspacePath, content: trimmedTaskContent, modelId: modelId)
+        let task = projectTasksStore.addTask(
+            workspacePath: workspacePath,
+            content: trimmedTaskContent,
+            providerID: providerID,
+            modelId: modelId
+        )
         sendTaskToAgent(
             prompt: trimmedAgentPrompt,
             taskID: task.id,
             screenshotPaths: task.screenshotPaths,
+            providerID: task.providerID,
             modelId: task.modelId,
             workspacePath: workspacePath,
             selectAgent: selectAgent
@@ -643,13 +744,17 @@ struct PopoutView: View {
             tasksPath: tasksPath,
             triggerAddNewTask: triggerAddNewTask,
             linkedStatuses: linkedStatuses,
-            models: modelPickerModels(including: nil),
-            onSendToAgent: { prompt, taskID, screenshotPaths, modelId in
+            newTaskProviderID: appState.selectedAgentProviderID,
+            modelsForProvider: { providerID in
+                modelPickerModels(for: providerID, including: nil)
+            },
+            onSendToAgent: { prompt, taskID, screenshotPaths, providerID, modelId in
                 if let taskID {
                     sendTaskToAgent(
                         prompt: prompt,
                         taskID: taskID,
                         screenshotPaths: screenshotPaths,
+                        providerID: providerID,
                         modelId: modelId,
                         workspacePath: tasksPath,
                         selectAgent: false
@@ -822,13 +927,27 @@ struct PopoutView: View {
     /// When select is false, the new tab is created but the current view (e.g. Tasks list) is not changed.
     /// Returns the new tab so callers can set linkedTaskID etc.
     @discardableResult
-    private func addNewAgentTab(initialPrompt: String? = nil, lastWorkspacePath: String? = nil, modelId: String? = nil, select: Bool = true) -> AgentTab? {
+    private func addNewAgentTab(
+        initialPrompt: String? = nil,
+        lastWorkspacePath: String? = nil,
+        modelId: String? = nil,
+        providerID: AgentProviderID? = nil,
+        select: Bool = true
+    ) -> AgentTab? {
         let targetWorkspacePath = lastWorkspacePath ?? tabManager.activeProjectPath
         guard let targetWorkspacePath else { return nil }
+        let resolvedProviderID = providerID ?? appState.selectedAgentProviderID
+        let resolvedModelID = modelId ?? effectiveSelectedModel(for: resolvedProviderID)
         if appState.isMainContentCollapsed {
             withAnimation(.easeInOut(duration: 0.2)) { appState.isMainContentCollapsed = false }
         }
-        guard let newTab = tabManager.addTab(initialPrompt: initialPrompt, workspacePath: targetWorkspacePath, modelId: modelId, select: select) else { return nil }
+        guard let newTab = tabManager.addTab(
+            initialPrompt: initialPrompt,
+            workspacePath: targetWorkspacePath,
+            modelId: resolvedModelID,
+            providerID: resolvedProviderID,
+            select: select
+        ) else { return nil }
         if let snapshot = gitBranchSnapshotsByWorkspace[newTab.workspacePath] {
             currentBranch = snapshot.current
             gitBranches = snapshot.branches
@@ -855,16 +974,29 @@ struct PopoutView: View {
         PreferredTerminalApp(rawValue: preferredTerminalAppRawValue) ?? .automatic
     }
 
-    /// Models to show in the picker (respects "disabled" preference; uses default-enabled set when never set). Includes effectiveSelection if it was hidden so the UI stays consistent.
-    private func modelPickerModels(including effectiveSelection: String? = nil) -> [ModelOption] {
-        let allIds = Set(appState.availableModels.map(\.id))
-        let disabled = AppPreferences.effectiveDisabledModelIds(allIds: allIds, raw: disabledModelIdsRaw)
-        var visible = appState.visibleModels(disabledIds: disabled)
+    /// Models to show in the picker (respects "disabled" preference; uses provider defaults when never set). Includes effectiveSelection if it was hidden so the UI stays consistent.
+    private func modelPickerModels(for providerID: AgentProviderID = .cursor, including effectiveSelection: String? = nil) -> [ModelOption] {
+        let allIds = Set(appState.availableModels(for: providerID).map(\.id))
+        let disabled = AppPreferences.effectiveDisabledModelIds(
+            allIds: allIds,
+            raw: disabledModelIdsRaw,
+            defaultEnabledModelIds: AgentProviders.defaultEnabledModelIds(for: providerID),
+            defaultModelID: AgentProviders.defaultModelID(for: providerID)
+        )
+        var visible = appState.visibleModels(for: providerID, disabledIds: disabled)
         let currentId = effectiveSelection ?? selectedModel
-        if !visible.contains(where: { $0.id == currentId }), let current = appState.model(for: currentId) {
+        if !visible.contains(where: { $0.id == currentId }),
+           let current = appState.model(for: currentId, providerID: providerID) {
             visible = visible + [current]
         }
         return visible
+    }
+
+    private func effectiveSelectedModel(for providerID: AgentProviderID) -> String {
+        if appState.model(for: selectedModel, providerID: providerID) != nil {
+            return selectedModel
+        }
+        return appState.defaultModelID(for: providerID)
     }
 
     private var apiUsagePercent: Int {
@@ -1094,7 +1226,7 @@ struct PopoutView: View {
             ))
     }
 
-    var body: some View {
+    private var bodyWithLifecycle: some View {
         bodyWithShortcuts
         .onAppear {
             sanitizeSelectedModel()
@@ -1117,6 +1249,11 @@ struct PopoutView: View {
             sanitizeSelectedModel()
             updateHangDiagnosticsSnapshot()
         }
+        .onChange(of: appState.selectedAgentProviderID) { _, providerID in
+            appState.loadModels(for: providerID)
+            sanitizeSelectedModel()
+            updateHangDiagnosticsSnapshot()
+        }
         .onChange(of: tabManager.selectedTabID) { _, _ in
             refreshGitState(for: currentWorkspacePath)
             updateHangDiagnosticsSnapshot()
@@ -1136,6 +1273,10 @@ struct PopoutView: View {
         .onChange(of: appState.taskListRevision) { _, _ in
             updateHangDiagnosticsSnapshot()
         }
+    }
+
+    private var composedBody: some View {
+        bodyWithLifecycle
         .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
         .shadow(color: Color.black.opacity(0.36), radius: 28, y: 16)
         .sheet(isPresented: Binding(
@@ -1194,6 +1335,10 @@ struct PopoutView: View {
         #endif
     }
 
+    var body: some View {
+        composedBody
+    }
+
     // MARK: - Unified header
 
     /// Light blue used for agent-tab progress spinner.
@@ -1217,7 +1362,7 @@ struct PopoutView: View {
             ? CursorTheme.textPrimary(for: colorScheme)
             : CursorTheme.colorForWorkspace(path: currentWorkspacePath)
         return HStack(spacing: 14) {
-            CursorPlusLogoView(height: 36, projectColor: projectColor)
+            SidebarLogoView(height: 36, projectColor: projectColor, providerID: appState.selectedAgentProviderID)
 
             if !isMainContentCollapsed {
                 VStack(alignment: .leading, spacing: 4) {
@@ -1698,7 +1843,10 @@ struct PopoutView: View {
         let projectName = appState.workspaceDisplayName(for: tab.workspacePath).isEmpty
             ? ((tab.workspacePath as NSString).lastPathComponent.isEmpty ? "Project" : (tab.workspacePath as NSString).lastPathComponent)
             : appState.workspaceDisplayName(for: tab.workspacePath)
-        let modelLabel = appState.model(for: selectedModel)?.label ?? "Auto"
+        let modelLabel = appState.model(
+            for: tab.modelId ?? effectiveSelectedModel(for: tab.providerID),
+            providerID: tab.providerID
+        )?.label ?? "Auto"
         // Use view's currentBranch when tab's is empty (e.g. new tab before onChange runs) so we don't flash "No branch".
         let branchDisplay = tab.currentBranch.isEmpty ? currentBranch : tab.currentBranch
         return VStack(spacing: 0) {
@@ -1894,8 +2042,11 @@ struct PopoutView: View {
 
             HStack(alignment: .center, spacing: 8) {
                 ModelPickerView(
-                    selectedModelId: tab.modelId ?? selectedModel,
-                    models: modelPickerModels(including: tab.modelId ?? selectedModel),
+                    selectedModelId: tab.modelId ?? effectiveSelectedModel(for: tab.providerID),
+                    models: modelPickerModels(
+                        for: tab.providerID,
+                        including: tab.modelId ?? effectiveSelectedModel(for: tab.providerID)
+                    ),
                     onSelect: { tab.modelId = $0 }
                 )
 
@@ -2013,8 +2164,9 @@ struct PopoutView: View {
     // MARK: - Helpers
 
     private func sanitizeSelectedModel() {
-        guard appState.model(for: selectedModel) == nil else { return }
-        selectedModel = AvailableModels.autoID
+        let providerID = appState.selectedAgentProviderID
+        guard appState.model(for: selectedModel, providerID: providerID) == nil else { return }
+        selectedModel = appState.defaultModelID(for: providerID)
     }
 
     private var cardBackground: some ShapeStyle {
@@ -2092,7 +2244,7 @@ struct PopoutView: View {
     private func submitOrQueuePrompt(tab: AgentTab) {
         agentSessionStore.submitOrQueuePrompt(
             tab: tab,
-            selectedModel: selectedModel,
+            selectedModel: effectiveSelectedModel(for: tab.providerID),
             incrementUsage: { messagesSentForUsage += 1 },
             recordHangEvent: recordHangEvent(_:metadata:),
             updateTabTitle: updateTabTitle(for:in:),
@@ -2113,7 +2265,7 @@ struct PopoutView: View {
     private func processNextQueuedFollowUp(tab: AgentTab) {
         agentSessionStore.submitOrQueuePrompt(
             tab: tab,
-            selectedModel: selectedModel,
+            selectedModel: effectiveSelectedModel(for: tab.providerID),
             incrementUsage: { messagesSentForUsage += 1 },
             recordHangEvent: recordHangEvent(_:metadata:),
             updateTabTitle: updateTabTitle(for:in:),
@@ -2127,7 +2279,7 @@ struct PopoutView: View {
     private func compressContext(tab: AgentTab) {
         agentSessionStore.compressContext(
             tab: tab,
-            selectedModel: selectedModel,
+            selectedModel: effectiveSelectedModel(for: tab.providerID),
             incrementUsage: { messagesSentForUsage += 1 },
             recordHangEvent: recordHangEvent(_:metadata:),
             updateTabTitle: updateTabTitle(for:in:),
@@ -2188,7 +2340,7 @@ struct PopoutView: View {
         agentSessionStore.sendInCurrentTab(
             prompt: prompt,
             tab: tab,
-            selectedModel: selectedModel,
+            selectedModel: effectiveSelectedModel(for: tab.providerID),
             incrementUsage: { messagesSentForUsage += 1 },
             recordHangEvent: recordHangEvent(_:metadata:),
             updateTabTitle: updateTabTitle(for:in:),
@@ -2221,7 +2373,7 @@ struct PopoutView: View {
     private func sendPrompt(tab currentTab: AgentTab) {
         agentSessionStore.sendPrompt(
             tab: currentTab,
-            selectedModel: selectedModel,
+            selectedModel: effectiveSelectedModel(for: currentTab.providerID),
             incrementUsage: { messagesSentForUsage += 1 },
             recordHangEvent: recordHangEvent(_:metadata:),
             updateTabTitle: updateTabTitle(for:in:),
