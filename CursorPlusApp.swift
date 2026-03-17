@@ -83,9 +83,9 @@ struct BrandAppIconView: View {
 }
 
 enum BrandStatusIcon {
-    /// Menubar icon: reuses the actual application icon so dock and UI stay in sync.
+    /// Menubar icon: uses the dedicated branded icon asset for crisp small-size rendering.
     static func makeImage(size: CGFloat = 22) -> NSImage {
-        let source = CursorAppIcon.load()
+        let source = NSImage(named: "AppIconImage") ?? CursorAppIcon.load()
         let target = NSImage(size: NSSize(width: size, height: size), flipped: false) { rect in
             source.draw(in: rect, from: .zero, operation: .sourceOver, fraction: 1)
             return true
