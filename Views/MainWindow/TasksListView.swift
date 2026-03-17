@@ -187,9 +187,21 @@ struct TasksListView: View {
         }
     }
 
+    private func materializedScreenshot(from image: NSImage) -> NSImage? {
+        guard let tiffData = image.tiffRepresentation,
+              let bitmap = NSBitmapImageRep(data: tiffData),
+              let pngData = bitmap.representation(using: .png, properties: [:]),
+              let stableImage = NSImage(data: pngData) else {
+            return nil
+        }
+
+        return stableImage
+    }
+
     private func appendScreenshot(to screenshots: inout [DraftTaskScreenshot], from pasteboard: NSPasteboard = .general) {
         guard screenshots.count < AppLimits.maxScreenshots,
-              let image = SubmittableTextEditor.imageFromPasteboard(pasteboard) else {
+              let pastedImage = SubmittableTextEditor.imageFromPasteboard(pasteboard),
+              let image = materializedScreenshot(from: pastedImage) else {
             return
         }
 

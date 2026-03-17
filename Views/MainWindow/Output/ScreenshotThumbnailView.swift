@@ -71,9 +71,13 @@ struct ScreenshotThumbnailView: View {
 
     @State private var displayImage: NSImage?
 
+    private var resolvedImage: NSImage? {
+        image ?? displayImage
+    }
+
     var body: some View {
         Group {
-            if let nsImage = displayImage {
+            if let nsImage = resolvedImage {
                 HStack(alignment: .center, spacing: 6) {
                     Image(nsImage: nsImage)
                         .resizable()
@@ -102,9 +106,7 @@ struct ScreenshotThumbnailView: View {
             }
         }
         .task(id: imageURL?.path ?? image?.hash.description ?? "") {
-            if let image {
-                displayImage = image
-            } else if let imageURL {
+            if let imageURL {
                 displayImage = ImageAssetCache.shared.screenshot(for: imageURL)
             } else {
                 displayImage = nil
