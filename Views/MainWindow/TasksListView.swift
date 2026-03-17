@@ -999,7 +999,8 @@ private struct TaskScreenshotSummaryView: View {
     let workspacePath: String
     let screenshotPath: String
     let screenshotCount: Int
-    var thumbnailSize: CGSize = TaskRowView.inlineScreenshotSize
+    var thumbnailSize: CGSize = TaskRowView.compactScreenshotSize
+    var onOpenPreview: (() -> Void)? = nil
 
     private var imageURL: URL {
         ProjectTasksStorage.taskScreenshotFileURL(
@@ -1037,6 +1038,10 @@ private struct TaskScreenshotSummaryView: View {
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("\(screenshotCount) screenshots attached")
+        .contentShape(Rectangle())
+        .onTapGesture(count: 2) {
+            onOpenPreview?()
+        }
     }
 }
 
@@ -1045,6 +1050,7 @@ private struct TaskScreenshotSummaryView: View {
 private struct TaskRowView: View {
     @Environment(\.colorScheme) private var colorScheme
     static let inlineScreenshotSize = CGSize(width: 56, height: 56)
+    static let compactScreenshotSize = CGSize(width: 42, height: 42)
     let task: ProjectTask
     let workspacePath: String
     var models: [ModelOption] = []
@@ -1085,6 +1091,11 @@ private struct TaskRowView: View {
     }
     /// When true, show model picker; when false, show read-only chip (no dropdown).
     private var canEditAgentModel: Bool { !isProcessing && !isStopped }
+    private var firstScreenshotPath: String? { task.screenshotPaths.first }
+    private var hasScreenshotSummary: Bool { !isEditing && firstScreenshotPath != nil }
+    private var trailingContentReservedWidth: CGFloat {
+        hasScreenshotSummary ? 92 : 40
+    }
     private var selectedModel: ModelOption {
         models.first { $0.id == task.modelId }
             ?? AgentProviders.fallbackModels(for: task.providerID).first
@@ -1096,6 +1107,18 @@ private struct TaskRowView: View {
     @ViewBuilder
     private var trailingControls: some View {
         HStack(spacing: CursorTheme.spaceS) {
+            if let firstScreenshotPath, !isEditing {
+                TaskScreenshotSummaryView(
+                    workspacePath: workspacePath,
+                    screenshotPath: firstScreenshotPath,
+                    screenshotCount: task.screenshotPaths.count,
+                    thumbnailSize: Self.compactScreenshotSize,
+                    onOpenPreview: {
+                        onPreviewScreenshot?(task.screenshotPaths, firstScreenshotPath, onDeleteScreenshot)
+                    }
+                )
+            }
+
             if isProcessing, let onStopAgent {
                 Menu {
                     Button("Review", systemImage: "person") {
@@ -1238,15 +1261,6 @@ private struct TaskRowView: View {
                         }
                         .onTapGesture(count: 2) { if !task.completed { onTap() } }
                 }
-                if !isEditing, let firstScreenshotPath = task.screenshotPaths.first {
-                    TaskScreenshotSummaryView(
-                        workspacePath: workspacePath,
-                        screenshotPath: firstScreenshotPath,
-                        screenshotCount: task.screenshotPaths.count,
-                        thumbnailSize: Self.inlineScreenshotSize
-                    )
-                    .padding(.top, CursorTheme.spaceXS)
-                }
                 if !task.completed, !models.isEmpty, !isEditing {
                     Group {
                         if canEditAgentModel {
@@ -1263,7 +1277,7 @@ private struct TaskRowView: View {
                 }
             }
             .frame(minWidth: 0, maxWidth: .infinity, alignment: .leading)
-            .padding(.trailing, 40)
+            .padding(.trailing, trailingContentReservedWidth)
         }
         .padding(CursorTheme.paddingCard)
         .background(CursorTheme.surfaceRaised(for: colorScheme), in: RoundedRectangle(cornerRadius: CursorTheme.radiusCard, style: .continuous))

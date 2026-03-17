@@ -38,8 +38,7 @@ struct ScreenshotPreviewModal: View {
         return urls[selectedIndex]
     }
 
-    /// Single in-memory image (draft) or single URL: show one image.
-    private var singleDisplayImage: NSImage? {
+    private var currentDisplayImage: NSImage? {
         if let image { return image }
         guard let url = selectedURL else { return nil }
         return ImageAssetCache.shared.screenshot(for: url)
@@ -82,28 +81,40 @@ struct ScreenshotPreviewModal: View {
                     .padding(16)
                 }
 
-                if hasMultiple {
-                    HStack(alignment: .center, spacing: CursorTheme.spaceM) {
-                        previewNavButton(systemName: "chevron.left", action: showPreviousScreenshot)
-
-                        if let selectedURL {
-                            CachedPreviewImageView(url: selectedURL) { nsImage in
-                                screenshotImageCell(nsImage: nsImage, index: selectedIndex)
+                if let nsImage = currentDisplayImage {
+                    screenshotImageCell(nsImage: nsImage, index: selectedIndex)
+                        .overlay(alignment: .leading) {
+                            if hasMultiple {
+                                previewNavButton(systemName: "chevron.left", action: showPreviousScreenshot)
+                                    .padding(.leading, CursorTheme.spaceM)
                             }
                         }
-
-                        previewNavButton(systemName: "chevron.right", action: showNextScreenshot)
-                    }
-                    .frame(maxWidth: 980, maxHeight: 700)
-                } else if let nsImage = singleDisplayImage {
-                    // Single image (URL or in-memory draft)
-                    screenshotImageCell(nsImage: nsImage, index: 0)
+                        .overlay(alignment: .trailing) {
+                            if hasMultiple {
+                                previewNavButton(systemName: "chevron.right", action: showNextScreenshot)
+                                    .padding(.trailing, CursorTheme.spaceM)
+                            }
+                        }
+                } else {
+                    RoundedRectangle(cornerRadius: CursorTheme.radiusCard, style: .continuous)
+                        .fill(Color.white.opacity(0.06))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: CursorTheme.radiusCard, style: .continuous)
+                                .stroke(Color.white.opacity(0.10), lineWidth: 1)
+                        )
+                        .overlay {
+                            Text("Unable to load screenshot")
+                                .font(.system(size: CursorTheme.fontBody, weight: .medium))
+                                .foregroundStyle(.white.opacity(0.75))
+                        }
+                        .frame(maxWidth: 900, maxHeight: 700)
                 }
 
                 Spacer(minLength: 0)
             }
         }
         .onAppear {
+            currentIndex = initialIndex
             guard escapeMonitor == nil else { return }
             escapeMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
                 Task { @MainActor in
@@ -164,7 +175,7 @@ struct ScreenshotPreviewModal: View {
         Image(nsImage: nsImage)
             .resizable()
             .aspectRatio(contentMode: .fit)
-            .frame(maxWidth: hasMultiple ? 860 : 900, maxHeight: 700)
+            .frame(maxWidth: 900, maxHeight: 700)
             .fixedSize(horizontal: true, vertical: true)
             .clipShape(RoundedRectangle(cornerRadius: CursorTheme.radiusCard, style: .continuous))
             .overlay(
@@ -200,23 +211,5 @@ struct ScreenshotPreviewModal: View {
                 .padding(CursorTheme.spaceS)
             }
             .shadow(color: .black.opacity(0.4), radius: 24, x: 0, y: 8)
-    }
-}
-
-private struct CachedPreviewImageView<Content: View>: View {
-    let url: URL
-    let content: (NSImage) -> Content
-
-    @State private var image: NSImage?
-
-    var body: some View {
-        Group {
-            if let image {
-                content(image)
-            }
-        }
-        .task(id: url.path) {
-            image = ImageAssetCache.shared.screenshot(for: url)
-        }
     }
 }
