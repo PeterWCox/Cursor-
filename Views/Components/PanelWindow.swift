@@ -62,6 +62,23 @@ struct PanelTabItem<T: Hashable>: Identifiable {
     }
 }
 
+/// Shared chrome strip used for panel tab bars and other top-row secondary controls.
+struct PanelChromeStrip<Content: View>: View {
+    @Environment(\.colorScheme) private var colorScheme
+
+    var horizontalPadding: CGFloat = CursorTheme.paddingHeaderHorizontal
+    var verticalPadding: CGFloat = CursorTheme.spaceXS
+    @ViewBuilder var content: () -> Content
+
+    var body: some View {
+        content()
+            .padding(.horizontal, horizontalPadding)
+            .padding(.vertical, verticalPadding)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(CursorTheme.chrome(for: colorScheme))
+    }
+}
+
 /// Reusable tab bar for panel windows (Tasks, Projects, Preview). Chrome strip, selected pill with surfaceMuted.
 struct PanelTabBarView<T: Hashable>: View {
     @Environment(\.colorScheme) private var colorScheme
@@ -69,30 +86,29 @@ struct PanelTabBarView<T: Hashable>: View {
     let tabs: [PanelTabItem<T>]
     @Binding var selection: T
     var onSelect: (T) -> Void = { _ in }
+    var horizontalPadding: CGFloat = CursorTheme.paddingHeaderHorizontal
 
     var body: some View {
-        HStack(spacing: 0) {
-            ForEach(tabs) { tab in
-                Button {
-                    selection = tab.id
-                    onSelect(tab.id)
-                } label: {
-                    Text(tab.displayLabel)
-                        .font(.system(size: 13, weight: selection == tab.id ? .semibold : .medium))
-                        .foregroundStyle(selection == tab.id ? CursorTheme.textPrimary(for: colorScheme) : CursorTheme.textSecondary(for: colorScheme))
-                        .padding(.horizontal, CursorTheme.spaceM)
-                        .padding(.vertical, CursorTheme.spaceS + CursorTheme.spaceXXS)
+        PanelChromeStrip(horizontalPadding: horizontalPadding) {
+            HStack(spacing: 0) {
+                ForEach(tabs) { tab in
+                    Button {
+                        selection = tab.id
+                        onSelect(tab.id)
+                    } label: {
+                        Text(tab.displayLabel)
+                            .font(.system(size: 13, weight: selection == tab.id ? .semibold : .medium))
+                            .foregroundStyle(selection == tab.id ? CursorTheme.textPrimary(for: colorScheme) : CursorTheme.textSecondary(for: colorScheme))
+                            .padding(.horizontal, CursorTheme.spaceM)
+                            .padding(.vertical, CursorTheme.spaceS + CursorTheme.spaceXXS)
+                    }
+                    .buttonStyle(.plain)
+                    .background(selection == tab.id ? CursorTheme.surfaceMuted(for: colorScheme) : Color.clear)
+                    .clipShape(RoundedRectangle(cornerRadius: CursorTheme.radiusTabBarPill, style: .continuous))
                 }
-                .buttonStyle(.plain)
-                .background(selection == tab.id ? CursorTheme.surfaceMuted(for: colorScheme) : Color.clear)
-                .clipShape(RoundedRectangle(cornerRadius: CursorTheme.radiusTabBarPill, style: .continuous))
+                Spacer(minLength: 0)
             }
-            Spacer(minLength: 0)
         }
-        .padding(.horizontal, CursorTheme.paddingHeaderHorizontal)
-        .padding(.vertical, CursorTheme.spaceXS)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(CursorTheme.chrome(for: colorScheme))
     }
 }
 

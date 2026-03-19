@@ -102,6 +102,8 @@ struct TasksListView: View {
     var onDismiss: () -> Void
     /// When false, the list does not show its own header (e.g. when the panel title row already shows "Tasks" + project).
     var showHeader: Bool = true
+    /// When true, render only the inner tab/content stack so the parent window owns the outer shell.
+    var embeddedInMainWindow: Bool = false
     /// Launch setup agent or open Advanced for this project (Configure Setup button). When nil, Configure Setup is omitted.
     var onLaunchSetupAgent: ((String) -> Void)? = nil
 
@@ -276,45 +278,13 @@ struct TasksListView: View {
 
     var body: some View {
         let snapshot = taskSnapshot
-        PanelWindowView(
-            header: { if showHeader { header } },
-            tabBar: {
-                PanelTabBarView(
-                    tabs: TasksListTab.allCases.map { tab in
-                        PanelTabItem(id: tab, label: tab.rawValue, count: snapshot.counts.count(for: tab))
-                    },
-                    selection: Binding(
-                        get: { store.selectedTasksTab },
-                        set: { store.selectTasksTab($0) }
-                    ),
-                    onSelect: { selectTasksTab($0) }
-                )
-            },
-            showTabBar: true,
-            content: {
-                ScrollViewReader { proxy in
-                ScrollView(.vertical, showsIndicators: true) {
-                    LazyVStack(alignment: .leading, spacing: CursorTheme.spacingListItems) {
-                        Color.clear
-                            .frame(height: 0)
-                            .id("tasksScrollTop")
-                        tabContent(snapshot: snapshot)
-                            .id(store.selectedTasksTab)
-                    }
-                    .padding(CursorTheme.paddingPanel)
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .onChange(of: store.isAddingNewTask) { _, showing in
-                    if showing {
-                        proxy.scrollTo("tasksScrollTop", anchor: .top)
-                    }
-                }
-                .transaction { transaction in
-                    transaction.animation = nil
-                }
+        Group {
+            if embeddedInMainWindow {
+                embeddedBody(snapshot: snapshot)
+            } else {
+                standaloneBody(snapshot: snapshot)
             }
-            }
-        )
+        }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .onAppear {
             reloadTasks()
@@ -373,6 +343,69 @@ struct TasksListView: View {
                         }
                     } : nil
                 )
+            }
+        }
+    }
+
+    private func standaloneBody(snapshot: TasksListSnapshot) -> some View {
+        PanelWindowView(
+            header: { if showHeader { header } },
+            tabBar: {
+                tasksTabBar(snapshot: snapshot, horizontalPadding: CursorTheme.paddingHeaderHorizontal)
+            },
+            showTabBar: true,
+            content: {
+                tasksScrollContent(snapshot: snapshot)
+            }
+        )
+    }
+
+    private func embeddedBody(snapshot: TasksListSnapshot) -> some View {
+        VStack(spacing: 0) {
+            if showHeader {
+                header
+            }
+            tasksTabBar(snapshot: snapshot, horizontalPadding: CursorTheme.paddingChrome)
+            Divider()
+                .background(CursorTheme.border(for: colorScheme))
+            tasksScrollContent(snapshot: snapshot)
+        }
+    }
+
+    private func tasksTabBar(snapshot: TasksListSnapshot, horizontalPadding: CGFloat) -> some View {
+        PanelTabBarView(
+            tabs: TasksListTab.allCases.map { tab in
+                PanelTabItem(id: tab, label: tab.rawValue, count: snapshot.counts.count(for: tab))
+            },
+            selection: Binding(
+                get: { store.selectedTasksTab },
+                set: { store.selectTasksTab($0) }
+            ),
+            onSelect: { selectTasksTab($0) },
+            horizontalPadding: horizontalPadding
+        )
+    }
+
+    private func tasksScrollContent(snapshot: TasksListSnapshot) -> some View {
+        ScrollViewReader { proxy in
+            ScrollView(.vertical, showsIndicators: true) {
+                LazyVStack(alignment: .leading, spacing: CursorTheme.spacingListItems) {
+                    Color.clear
+                        .frame(height: 0)
+                        .id("tasksScrollTop")
+                    tabContent(snapshot: snapshot)
+                        .id(store.selectedTasksTab)
+                }
+                .padding(CursorTheme.paddingPanel)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .onChange(of: store.isAddingNewTask) { _, showing in
+                if showing {
+                    proxy.scrollTo("tasksScrollTop", anchor: .top)
+                }
+            }
+            .transaction { transaction in
+                transaction.animation = nil
             }
         }
     }

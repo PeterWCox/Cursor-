@@ -261,11 +261,11 @@ private struct PopoutTasksListContent: View {
             onTasksDidUpdate: onTasksDidUpdate,
             onDismiss: onDismiss,
             showHeader: showHeader,
+            embeddedInMainWindow: true,
             onLaunchSetupAgent: onLaunchSetupAgent
         )
         .id(tasksPath)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .padding(12)
     }
 }
 
@@ -1235,6 +1235,58 @@ Build the initial app or service structure directly in this repository, choose s
 
     private let sidebarWidth: CGFloat = 250
 
+    private enum SidebarEdge: Equatable {
+        case leading
+        case trailing
+
+        var alignment: Alignment {
+            switch self {
+            case .leading:
+                return .leading
+            case .trailing:
+                return .trailing
+            }
+        }
+
+        var expandChevron: String {
+            switch self {
+            case .leading:
+                return "chevron.right.2"
+            case .trailing:
+                return "chevron.left.2"
+            }
+        }
+
+        var collapseChevron: String {
+            switch self {
+            case .leading:
+                return "chevron.left.2"
+            case .trailing:
+                return "chevron.right.2"
+            }
+        }
+
+        var moveSidebarIcon: String {
+            switch self {
+            case .leading:
+                return "sidebar.trailing"
+            case .trailing:
+                return "sidebar.leading"
+            }
+        }
+
+        var moveSidebarHelp: String {
+            switch self {
+            case .leading:
+                return "Move sidebar to right"
+            case .trailing:
+                return "Move sidebar to left"
+            }
+        }
+    }
+
+    private var sidebarEdge: SidebarEdge { isSidebarOnRight ? .trailing : .leading }
+
     /// Tab focuses the prompt input; these are set by SubmittableTextEditor via onFocusRequested.
     @State private var focusPromptInput: (() -> Void)?
     @State private var isPromptFirstResponder: (() -> Bool)?
@@ -1319,65 +1371,63 @@ Build the initial app or service structure directly in this repository, choose s
     @ViewBuilder
     private func dashboardPanelTabBar(workspacePath path: String) -> some View {
         let terminals = dashboardPanelTerminals(for: path)
-        HStack(spacing: 0) {
-            Button {
-                tabManager.selectedTerminalID = nil
-            } label: {
-                HStack(spacing: 6) {
-                    Image(systemName: "eye")
-                        .font(.system(size: 13))
-                    Text("Preview")
-                        .font(.system(size: 13, weight: tabManager.selectedTerminalID == nil ? .semibold : .medium))
-                }
-                .foregroundStyle(tabManager.selectedTerminalID == nil ? CursorTheme.textPrimary(for: colorScheme) : CursorTheme.textSecondary(for: colorScheme))
-                .padding(.horizontal, CursorTheme.spaceM)
-                .padding(.vertical, CursorTheme.spaceS + CursorTheme.spaceXXS)
-            }
-            .buttonStyle(.plain)
-            .background(tabManager.selectedTerminalID == nil ? CursorTheme.surfaceMuted(for: colorScheme) : Color.clear)
-            .clipShape(RoundedRectangle(cornerRadius: CursorTheme.radiusTabBarPill, style: .continuous))
-            .help("Preview overview")
-            ForEach(terminals) { term in
-                HStack(spacing: 0) {
-                    Button {
-                        tabManager.selectedTerminalID = term.id
-                        tabManager.selectedTabID = nil
-                        tabManager.selectedTasksViewPath = nil
-                        tabManager.selectedProjectPath = term.workspacePath
-                        tabManager.selectedDashboardViewPath = term.isDashboardTab ? term.workspacePath : nil
-                    } label: {
-                        HStack(spacing: 6) {
-                            Image(systemName: "terminal")
-                                .font(.system(size: 13))
-                            Text(term.title)
-                                .font(.system(size: 13, weight: term.id == tabManager.selectedTerminalID ? .semibold : .medium))
-                                .lineLimit(1)
-                        }
-                        .foregroundStyle(term.id == tabManager.selectedTerminalID ? CursorTheme.textPrimary(for: colorScheme) : CursorTheme.textSecondary(for: colorScheme))
-                        .padding(.leading, CursorTheme.spaceM)
-                        .padding(.trailing, CursorTheme.spaceS)
-                        .padding(.vertical, CursorTheme.spaceS + CursorTheme.spaceXXS)
+        PanelChromeStrip(horizontalPadding: CursorTheme.paddingChrome) {
+            HStack(spacing: 0) {
+                Button {
+                    tabManager.selectedTerminalID = nil
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: "eye")
+                            .font(.system(size: 13))
+                        Text("Preview")
+                            .font(.system(size: 13, weight: tabManager.selectedTerminalID == nil ? .semibold : .medium))
                     }
-                    .buttonStyle(.plain)
-                    .help(term.title)
-                    Button(action: { tabManager.closeTerminalTab(term.id) }) {
-                        Image(systemName: "xmark")
-                            .font(.system(size: 8, weight: .bold))
-                            .foregroundStyle(CursorTheme.textTertiary(for: colorScheme))
-                            .frame(width: 14, height: 14)
-                            .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                    .padding(.trailing, CursorTheme.spaceS)
+                    .foregroundStyle(tabManager.selectedTerminalID == nil ? CursorTheme.textPrimary(for: colorScheme) : CursorTheme.textSecondary(for: colorScheme))
+                    .padding(.horizontal, CursorTheme.spaceM)
+                    .padding(.vertical, CursorTheme.spaceS + CursorTheme.spaceXXS)
                 }
-                .background(term.id == tabManager.selectedTerminalID ? CursorTheme.surfaceMuted(for: colorScheme) : Color.clear)
+                .buttonStyle(.plain)
+                .background(tabManager.selectedTerminalID == nil ? CursorTheme.surfaceMuted(for: colorScheme) : Color.clear)
                 .clipShape(RoundedRectangle(cornerRadius: CursorTheme.radiusTabBarPill, style: .continuous))
+                .help("Preview overview")
+                ForEach(terminals) { term in
+                    HStack(spacing: 0) {
+                        Button {
+                            tabManager.selectedTerminalID = term.id
+                            tabManager.selectedTabID = nil
+                            tabManager.selectedTasksViewPath = nil
+                            tabManager.selectedProjectPath = term.workspacePath
+                            tabManager.selectedDashboardViewPath = term.isDashboardTab ? term.workspacePath : nil
+                        } label: {
+                            HStack(spacing: 6) {
+                                Image(systemName: "terminal")
+                                    .font(.system(size: 13))
+                                Text(term.title)
+                                    .font(.system(size: 13, weight: term.id == tabManager.selectedTerminalID ? .semibold : .medium))
+                                    .lineLimit(1)
+                            }
+                            .foregroundStyle(term.id == tabManager.selectedTerminalID ? CursorTheme.textPrimary(for: colorScheme) : CursorTheme.textSecondary(for: colorScheme))
+                            .padding(.leading, CursorTheme.spaceM)
+                            .padding(.trailing, CursorTheme.spaceS)
+                            .padding(.vertical, CursorTheme.spaceS + CursorTheme.spaceXXS)
+                        }
+                        .buttonStyle(.plain)
+                        .help(term.title)
+                        Button(action: { tabManager.closeTerminalTab(term.id) }) {
+                            Image(systemName: "xmark")
+                                .font(.system(size: 8, weight: .bold))
+                                .foregroundStyle(CursorTheme.textTertiary(for: colorScheme))
+                                .frame(width: 14, height: 14)
+                                .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .padding(.trailing, CursorTheme.spaceS)
+                    }
+                    .background(term.id == tabManager.selectedTerminalID ? CursorTheme.surfaceMuted(for: colorScheme) : Color.clear)
+                    .clipShape(RoundedRectangle(cornerRadius: CursorTheme.radiusTabBarPill, style: .continuous))
+                }
             }
         }
-        .padding(.horizontal, CursorTheme.paddingChrome)
-        .padding(.vertical, CursorTheme.spaceXS)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(CursorTheme.chrome(for: colorScheme))
     }
 
     /// Shown when Preview tab is selected and terminals exist (user should pick a tab).
@@ -1448,52 +1498,76 @@ Build the initial app or service structure directly in this repository, choose s
         mainContentWithSidebar
     }
 
-    @ViewBuilder
-    private var mainContentWithSidebar: some View {
-        let sidebarColumn = VStack(spacing: 0) {
+    private var sidebarColumn: some View {
+        VStack(spacing: 0) {
             leftColumnHeader
             tabSidebar
         }
         .padding(.horizontal, CursorTheme.paddingSidebarUniform)
         .padding(.vertical, CursorTheme.paddingChrome)
         .frame(width: sidebarWidth)
+        .frame(maxHeight: .infinity, alignment: .top)
         .clipped()
+    }
 
+    private var splitDivider: some View {
+        Divider()
+            .background(CursorTheme.border(for: colorScheme))
+            .frame(maxHeight: .infinity)
+    }
+
+    @ViewBuilder
+    private var mainColumnSecondaryBar: some View {
+        if tabManager.selectedDashboardViewPath == selectedProjectPath,
+           let path = selectedProjectPath,
+           !path.isEmpty {
+            dashboardPanelTabBar(workspacePath: path)
+        }
+    }
+
+    private var shouldShowMainColumnSecondaryBar: Bool {
+        tabManager.selectedDashboardViewPath == selectedProjectPath
+            && selectedProjectPath?.isEmpty == false
+    }
+
+    private var mainColumn: some View {
+        VStack(spacing: 0) {
+            mainColumnHeaderArea
+            if shouldShowMainColumnSecondaryBar {
+                mainColumnSecondaryBar
+            }
+            Divider()
+                .background(CursorTheme.border(for: colorScheme))
+            mainContentZStack
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .clipped()
+    }
+
+    @ViewBuilder
+    private var mainContentWithSidebar: some View {
         if isMainContentCollapsed {
             sidebarColumn
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         } else {
             GeometryReader { geometry in
                 let contentWidth = max(0, geometry.size.width)
-                let dividerTrackWidth: CGFloat = 1
-                let agentWidth = max(0, contentWidth - sidebarWidth - dividerTrackWidth)
-                let dividerView = Divider()
-                    .frame(width: 1)
-                    .background(CursorTheme.border(for: colorScheme))
-                    .frame(maxHeight: .infinity)
-                let mainColumn = VStack(spacing: 0) {
-                    mainColumnHeaderArea
-                    if tabManager.selectedDashboardViewPath == selectedProjectPath, let path = selectedProjectPath, !path.isEmpty {
-                        dashboardPanelTabBar(workspacePath: path)
-                    }
-                    mainContentZStack
-                }
-                .frame(maxWidth: .infinity)
-                .frame(width: agentWidth)
-                .clipped()
+                let agentWidth = max(0, contentWidth - sidebarWidth - 1)
 
                 HStack(alignment: .top, spacing: 0) {
-                    if isSidebarOnRight {
+                    if sidebarEdge == .trailing {
                         mainColumn
-                        dividerView
+                            .frame(width: agentWidth)
+                        splitDivider
                         sidebarColumn
                     } else {
                         sidebarColumn
-                        dividerView
+                        splitDivider
                         mainColumn
+                            .frame(width: agentWidth)
                     }
                 }
-                .clipped()
-                .frame(maxWidth: .infinity, alignment: isSidebarOnRight ? .trailing : .leading)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: sidebarEdge.alignment)
             }
             .frame(maxWidth: .infinity)
         }
@@ -1502,12 +1576,11 @@ Build the initial app or service structure directly in this repository, choose s
     private var bodyWithDashboardPersistence: some View {
         bodyContent
             .padding(.vertical, CursorTheme.paddingChrome)
-            .padding(.horizontal, isMainContentCollapsed ? CursorTheme.paddingChrome : 0)
-            .padding(.leading, isMainContentCollapsed ? 0 : (isSidebarOnRight ? CursorTheme.paddingChrome : 0))
-            .padding(.trailing, isMainContentCollapsed ? 0 : (isSidebarOnRight ? 0 : CursorTheme.paddingChrome))
-            .frame(minWidth: isMainContentCollapsed ? (sidebarWidth + CursorTheme.paddingChrome * 2) : (sidebarWidth + 120))
-            .frame(width: isMainContentCollapsed ? (sidebarWidth + CursorTheme.paddingChrome * 2) : nil)
-            .frame(maxWidth: isMainContentCollapsed ? (sidebarWidth + CursorTheme.paddingChrome * 2) : .infinity, minHeight: isMainContentCollapsed ? 280 : 400, maxHeight: .infinity)
+            .padding(.leading, isMainContentCollapsed ? 0 : (sidebarEdge == .trailing ? CursorTheme.paddingChrome : 0))
+            .padding(.trailing, isMainContentCollapsed ? 0 : (sidebarEdge == .leading ? CursorTheme.paddingChrome : 0))
+            .frame(minWidth: isMainContentCollapsed ? sidebarWidth : (sidebarWidth + 120))
+            .frame(width: isMainContentCollapsed ? sidebarWidth : nil)
+            .frame(maxWidth: isMainContentCollapsed ? sidebarWidth : .infinity, minHeight: isMainContentCollapsed ? 280 : 400, maxHeight: .infinity)
             .preferredColorScheme(resolvedColorScheme)
             .background(CursorTheme.panelGradient(for: colorScheme))
     }
@@ -1671,7 +1744,6 @@ Build the initial app or service structure directly in this repository, choose s
 
     /// Logo + BETA/DEBUG in sidebar column; when sidebar on right, header is mirrored (expand/menu on leading edge). Logo uses active project color.
     private var leftColumnHeader: some View {
-        let expandChevron = isSidebarOnRight ? "chevron.left.2" : "chevron.right.2"
         let projectColor = currentWorkspacePath.isEmpty
             ? CursorTheme.textPrimary(for: colorScheme)
             : CursorTheme.colorForWorkspace(path: currentWorkspacePath)
@@ -1699,8 +1771,8 @@ Build the initial app or service structure directly in this repository, choose s
             }
 
             Spacer(minLength: 0)
-            if isSidebarOnRight, isMainContentCollapsed {
-                IconButton(icon: expandChevron, action: { withAnimation(.easeInOut(duration: 0.2)) { appState.isMainContentCollapsed.toggle() } }, help: "Expand")
+            if sidebarEdge == .trailing, isMainContentCollapsed {
+                IconButton(icon: sidebarEdge.expandChevron, action: { withAnimation(.easeInOut(duration: 0.2)) { appState.isMainContentCollapsed.toggle() } }, help: "Expand")
                 ThreeDotMenuButton(size: .medium, help: "More options") {
                     Button(action: { appState.showSettingsSheet = true }) {
                         Label("Settings", systemImage: "gearshape")
@@ -1710,7 +1782,7 @@ Build the initial app or service structure directly in this repository, choose s
                     }
                 }
             }
-            if !isSidebarOnRight, isMainContentCollapsed {
+            if sidebarEdge == .leading, isMainContentCollapsed {
                 ThreeDotMenuButton(size: .medium, help: "More options") {
                     Button(action: { appState.showSettingsSheet = true }) {
                         Label("Settings", systemImage: "gearshape")
@@ -1719,21 +1791,20 @@ Build the initial app or service structure directly in this repository, choose s
                         Label("Minimise", systemImage: "minus")
                     }
                 }
-                IconButton(icon: expandChevron, action: { withAnimation(.easeInOut(duration: 0.2)) { appState.isMainContentCollapsed.toggle() } }, help: "Expand")
+                IconButton(icon: sidebarEdge.expandChevron, action: { withAnimation(.easeInOut(duration: 0.2)) { appState.isMainContentCollapsed.toggle() } }, help: "Expand")
             }
         }
     }
 
     /// Single title row: icon + header (e.g. Tasks / agent title) on the left, title bar buttons (collapse, sidebar, settings, minimise) on the right.
     private var mainColumnTitleRow: some View {
-        let collapseChevron = isSidebarOnRight ? "chevron.right.2" : "chevron.left.2"
         return HStack(alignment: .center, spacing: 0) {
             mainColumnTitleContent
             Spacer(minLength: 0)
-            IconButton(icon: collapseChevron, action: toggleMainContentCollapsed, help: "Collapse")
-            IconButton(icon: isSidebarOnRight ? "sidebar.leading" : "sidebar.trailing", action: {
+            IconButton(icon: sidebarEdge.collapseChevron, action: toggleMainContentCollapsed, help: "Collapse")
+            IconButton(icon: sidebarEdge.moveSidebarIcon, action: {
                 withAnimation(.easeInOut(duration: 0.2)) { isSidebarOnRight.toggle() }
-            }, help: isSidebarOnRight ? "Move sidebar to left" : "Move sidebar to right")
+            }, help: sidebarEdge.moveSidebarHelp)
             IconButton(icon: "gearshape", action: { appState.showSettingsSheet = true }, help: "Settings")
             IconButton(icon: "minus", action: dismiss, help: "Minimise")
         }
@@ -2100,7 +2171,8 @@ Build the initial app or service structure directly in this repository, choose s
         PanelTabBarView(
             tabs: ProjectsPanelTab.allCases.map { PanelTabItem(id: $0, label: $0.rawValue, count: nil) },
             selection: $projectsPanelTab,
-            onSelect: { projectsPanelTab = $0 }
+            onSelect: { projectsPanelTab = $0 },
+            horizontalPadding: CursorTheme.paddingChrome
         )
     }
 
