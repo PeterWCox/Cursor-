@@ -342,7 +342,7 @@ struct PopoutView: View {
     @State private var tasksViewTriggerAddNew: Bool = false
     @StateObject private var tasksViewShortcutCoordinator = TasksViewShortcutCoordinator()
     @StateObject private var agentSessionStore = AgentSessionStore()
-    /// Tab whose agent header prompt accordion is expanded (show full prompt below title).
+    /// Tab whose agent header shows the full user prompt (double-click title to toggle).
     @State private var expandedPromptTabID: UUID? = nil
     /// How many of the most recent turns are mounted for each tab. `Int.max` means full history.
     @State private var visibleTurnLimitsByTabID: [UUID: Int] = [:]
@@ -360,8 +360,10 @@ struct PopoutView: View {
     /// When true, hide main agent content and show only title bar + tab sidebar (uses AppState so panel can resize).
     private var isMainContentCollapsed: Bool { appState.isMainContentCollapsed }
 
-    private static let defaultVisibleTurnLimit = 40
+    private static let defaultVisibleTurnLimit = 20
     private static let visibleTurnPageSize = 30
+    /// Collapsed agent header: wrap up to this many lines, then tail ellipsis (`...`).
+    private static let agentHeaderPromptCollapsedLineLimit = 3
 
     /// Active tab when there is at least one; otherwise nil (splash state).
     private var tab: AgentTab? { tabManager.activeTab }
@@ -1499,7 +1501,7 @@ Build the initial app or service structure directly in this repository, choose s
     }
 
     private var sidebarColumn: some View {
-        VStack(spacing: 0) {
+        VStack(spacing: CursorTheme.gapSectionTitleToContent) {
             leftColumnHeader
             tabSidebar
         }
@@ -1800,7 +1802,7 @@ Build the initial app or service structure directly in this repository, choose s
     private var mainColumnTitleRow: some View {
         return HStack(alignment: .center, spacing: 0) {
             mainColumnTitleContent
-            Spacer(minLength: 0)
+                .frame(minWidth: 0, maxWidth: .infinity, alignment: .leading)
             IconButton(icon: sidebarEdge.collapseChevron, action: toggleMainContentCollapsed, help: "Collapse")
             IconButton(icon: sidebarEdge.moveSidebarIcon, action: {
                 withAnimation(.easeInOut(duration: 0.2)) { isSidebarOnRight.toggle() }
@@ -1930,36 +1932,35 @@ Build the initial app or service structure directly in this repository, choose s
             agentStatusIcon(tab: tab, status: status)
                 .frame(width: 32, height: 32)
             VStack(alignment: .leading, spacing: 2) {
-                HStack(alignment: .top, spacing: CursorTheme.spaceXS) {
-                    Text(displayTitle)
-                        .font(.system(size: CursorTheme.fontTitle, weight: .semibold))
-                        .foregroundStyle(CursorTheme.textPrimary(for: colorScheme))
-                        .lineLimit(isExpanded ? nil : 1)
-                        .truncationMode(.tail)
-                        .multilineTextAlignment(.leading)
-                        .frame(minWidth: 0, maxWidth: .infinity, alignment: .leading)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .textSelection(.enabled)
-                    if hasExpandablePrompt {
-                        Button(action: {
-                            withAnimation(.easeInOut(duration: 0.2)) {
-                                if expandedPromptTabID.wrappedValue == tab.id {
-                                    expandedPromptTabID.wrappedValue = nil
-                                } else {
-                                    expandedPromptTabID.wrappedValue = tab.id
-                                }
+                Text(displayTitle)
+                    .font(.system(size: CursorTheme.fontTitle, weight: .semibold))
+                    .foregroundStyle(CursorTheme.textPrimary(for: colorScheme))
+                    .multilineTextAlignment(.leading)
+                    .lineLimit(isExpanded ? nil : Self.agentHeaderPromptCollapsedLineLimit)
+                    .truncationMode(.tail)
+                    .frame(minWidth: 0, maxWidth: .infinity, alignment: .leading)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .textSelection(.enabled)
+                    .contentShape(Rectangle())
+                    .onTapGesture(count: 2) {
+                        guard hasExpandablePrompt else { return }
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            if expandedPromptTabID.wrappedValue == tab.id {
+                                expandedPromptTabID.wrappedValue = nil
+                            } else {
+                                expandedPromptTabID.wrappedValue = tab.id
                             }
-                        }) {
-                            Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
-                                .font(.system(size: 12, weight: .semibold))
-                                .foregroundStyle(CursorTheme.textTertiary(for: colorScheme))
-                                .contentShape(Rectangle())
-                                .frame(width: 24, height: 24)
                         }
-                        .buttonStyle(.plain)
-                        .help(isExpanded ? "Hide full prompt" : "Show full prompt")
                     }
-                }
+                    .onHover { hovering in
+                        guard hasExpandablePrompt else { return }
+                        if hovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
+                    }
+                    .help(
+                        hasExpandablePrompt
+                            ? (isExpanded ? "Double-click to collapse prompt" : "Double-click to show full prompt")
+                            : ""
+                    )
                 HStack(spacing: CursorTheme.spaceXS) {
                     let projectColor = tab.workspacePath.isEmpty
                         ? CursorTheme.textTertiary(for: colorScheme)
@@ -1974,7 +1975,7 @@ Build the initial app or service structure directly in this repository, choose s
                         .truncationMode(.middle)
                 }
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .frame(minWidth: 0, maxWidth: .infinity, alignment: .leading)
         }
     }
 
@@ -2853,9 +2854,9 @@ Build the initial app or service structure directly in this repository, choose s
             tab: tab,
             scrollToken: tab.scrollToken
         ) {
-            // Keep the stack eager for reliable append/layout behavior, but mount only the most
-            // recent slice by default so long conversations do not keep every markdown view alive.
-            VStack(alignment: .leading, spacing: 18) {
+            // Keep only a small recent slice mounted by default, and let rows realize lazily so
+            // switching between tabs does not eagerly rebuild every markdown-heavy turn.
+            LazyVStack(alignment: .leading, spacing: 18) {
                 if tab.turns.isEmpty {
                     emptyStateContent(tab: tab)
                 } else {

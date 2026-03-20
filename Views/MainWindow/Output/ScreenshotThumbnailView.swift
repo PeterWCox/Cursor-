@@ -88,14 +88,16 @@ struct ScreenshotThumbnailView: View {
                 thumbnailPlaceholder
             }
         }
-        .onAppear {
-            if let imageURL, displayImage == nil {
-                displayImage = ImageAssetCache.shared.screenshot(for: imageURL)
-            }
-        }
         .task(id: imageURL?.path ?? image?.hash.description ?? "") {
             if let imageURL {
-                displayImage = ImageAssetCache.shared.screenshot(for: imageURL)
+                if let cached = ImageAssetCache.shared.cachedScreenshot(for: imageURL) {
+                    displayImage = cached
+                    return
+                }
+
+                let loadedImage = await ImageAssetCache.shared.loadScreenshot(for: imageURL)
+                guard !Task.isCancelled else { return }
+                displayImage = loadedImage
             } else {
                 displayImage = nil
             }

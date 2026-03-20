@@ -302,13 +302,10 @@ private struct UserMessageScreenshotSummaryView: View {
     let workspacePath: String
     let screenshotCount: Int
     let onOpenPreview: () -> Void
+    @State private var loadedImage: NSImage?
 
     private var imageURL: URL {
         screenshotFileURL(path: path, workspacePath: workspacePath)
-    }
-
-    private var loadedImage: NSImage? {
-        ImageAssetCache.shared.screenshot(for: imageURL)
     }
 
     private var badgeText: String {
@@ -316,28 +313,55 @@ private struct UserMessageScreenshotSummaryView: View {
     }
 
     var body: some View {
-        if let nsImage = loadedImage {
-            ScreenshotThumbnailView(
-                image: nsImage,
-                size: CGSize(width: 42, height: 42),
-                cornerRadius: CursorTheme.spaceS,
-                onTapPreview: onOpenPreview
-            )
-            .overlay(alignment: .topTrailing) {
-                Text(badgeText)
-                    .font(.system(size: CursorTheme.fontCaption, weight: .semibold))
-                    .foregroundStyle(CursorTheme.textPrimary(for: colorScheme))
-                    .padding(.horizontal, CursorTheme.paddingBadgeHorizontal)
-                    .padding(.vertical, CursorTheme.paddingBadgeVertical)
-                    .background(CursorTheme.surface(for: colorScheme), in: Capsule())
+        Group {
+            if let nsImage = loadedImage {
+                ScreenshotThumbnailView(
+                    image: nsImage,
+                    size: CGSize(width: 42, height: 42),
+                    cornerRadius: CursorTheme.spaceS,
+                    onTapPreview: onOpenPreview
+                )
+            } else {
+                RoundedRectangle(cornerRadius: CursorTheme.spaceS, style: .continuous)
+                    .fill(CursorTheme.surfaceMuted(for: colorScheme))
                     .overlay(
-                        Capsule()
-                            .stroke(CursorTheme.borderStrong(for: colorScheme), lineWidth: 1)
+                        RoundedRectangle(cornerRadius: CursorTheme.spaceS, style: .continuous)
+                            .stroke(CursorTheme.border(for: colorScheme), lineWidth: 1)
                     )
-                    .padding(CursorTheme.spaceXS)
+                    .overlay {
+                        Image(systemName: "photo")
+                            .font(.system(size: 16, weight: .medium))
+                            .foregroundStyle(CursorTheme.textTertiary(for: colorScheme))
+                    }
+                    .frame(width: 42, height: 42)
+                    .contentShape(Rectangle())
+                    .onTapGesture(perform: onOpenPreview)
             }
-            .accessibilityElement(children: .ignore)
-            .accessibilityLabel("\(screenshotCount) screenshots attached")
+        }
+        .overlay(alignment: .topTrailing) {
+            Text(badgeText)
+                .font(.system(size: CursorTheme.fontCaption, weight: .semibold))
+                .foregroundStyle(CursorTheme.textPrimary(for: colorScheme))
+                .padding(.horizontal, CursorTheme.paddingBadgeHorizontal)
+                .padding(.vertical, CursorTheme.paddingBadgeVertical)
+                .background(CursorTheme.surface(for: colorScheme), in: Capsule())
+                .overlay(
+                    Capsule()
+                        .stroke(CursorTheme.borderStrong(for: colorScheme), lineWidth: 1)
+                )
+                .padding(CursorTheme.spaceXS)
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("\(screenshotCount) screenshots attached")
+        .task(id: imageURL.path) {
+            if let cached = ImageAssetCache.shared.cachedScreenshot(for: imageURL) {
+                loadedImage = cached
+                return
+            }
+
+            let image = await ImageAssetCache.shared.loadScreenshot(for: imageURL)
+            guard !Task.isCancelled else { return }
+            loadedImage = image
         }
     }
 }

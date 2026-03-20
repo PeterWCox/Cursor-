@@ -2,6 +2,7 @@ import Foundation
 
 enum TabManagerPersistence {
     private static let fileName = "cursor_plus_tabs.json"
+    private static let saveQueue = DispatchQueue(label: "CursorPlus.TabManagerPersistence", qos: .utility)
 
     static var saveURL: URL {
         let dir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
@@ -28,7 +29,9 @@ enum TabManagerPersistence {
     }
 
     static func save(_ state: SavedTabState) {
-        guard let data = try? JSONEncoder().encode(state) else { return }
-        try? data.write(to: saveURL)
+        saveQueue.async {
+            guard let data = try? JSONEncoder().encode(state) else { return }
+            try? data.write(to: saveURL, options: .atomic)
+        }
     }
 }
