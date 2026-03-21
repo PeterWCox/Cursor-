@@ -378,16 +378,18 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMenuDele
         sidebarLayoutKeyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
             guard let self else { return event }
             let mods = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
-            let normalizedMods = mods.subtracting(.numericPad)
-            guard normalizedMods == .option else { return event }
-            switch event.keyCode {
-            case UInt16(kVK_LeftArrow):
-                self.handleSidebarShortcut(.cycleLayoutsReverse)
-                return nil
-            case UInt16(kVK_RightArrow):
-                self.handleSidebarShortcut(.cycleLayouts)
+            let allowedModifiers: [NSEvent.ModifierFlags] = [.command, [.command, .shift]]
+            guard allowedModifiers.contains(mods) else { return event }
+            let action: FloatingPanel.SidebarShortcutAction = mods.contains(.shift) ? .cycleLayoutsReverse : .cycleLayouts
+            switch event.charactersIgnoringModifiers?.lowercased() {
+            case "`":
+                self.handleSidebarShortcut(action)
                 return nil
             default:
+                if event.keyCode == UInt16(kVK_ANSI_Grave) {
+                    self.handleSidebarShortcut(action)
+                    return nil
+                }
                 return event
             }
         }
@@ -434,36 +436,40 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMenuDele
 
         submenu.addItem(makeLayoutMenuActionItem(
             title: "Dock Left",
-            keyEquivalent: "1",
+            keyEquivalent: "l",
             action: .collapseLeft
         ))
         submenu.addItem(makeLayoutMenuActionItem(
             title: "Expanded Left",
-            keyEquivalent: "2",
+            keyEquivalent: "",
             action: .expandLeft
         ))
         submenu.addItem(makeLayoutMenuActionItem(
             title: "Expanded Right",
-            keyEquivalent: "3",
+            keyEquivalent: "",
             action: .expandRight
         ))
         submenu.addItem(makeLayoutMenuActionItem(
             title: "Dock Right",
-            keyEquivalent: "4",
+            keyEquivalent: "r",
             action: .collapseRight
         ))
         submenu.addItem(NSMenuItem.separator())
         submenu.addItem(makeLayoutMenuActionItem(
-            title: "Cycle Layouts Backward",
-            keyEquivalent: String(Character(UnicodeScalar(NSLeftArrowFunctionKey)!)),
-            action: .cycleLayoutsReverse,
-            modifiers: [.option]
+            title: "Open / Flip",
+            keyEquivalent: "o",
+            action: .expandOrFlip
         ))
         submenu.addItem(makeLayoutMenuActionItem(
-            title: "Cycle Layouts Forward",
-            keyEquivalent: String(Character(UnicodeScalar(NSRightArrowFunctionKey)!)),
-            action: .cycleLayouts,
-            modifiers: [.option]
+            title: "Cycle Layouts",
+            keyEquivalent: "`",
+            action: .cycleLayouts
+        ))
+        submenu.addItem(makeLayoutMenuActionItem(
+            title: "Cycle Layouts Reverse",
+            keyEquivalent: "`",
+            action: .cycleLayoutsReverse,
+            modifiers: [.command, .shift]
         ))
 
         statusItemLayoutMenu = submenu
@@ -895,26 +901,15 @@ class FloatingPanel: NSPanel {
     /// So Cmd+T always creates/focuses a new task when the panel is key (SwiftUI shortcuts can miss when focus is in list/text). Cmd+Shift+T is left for Reopen Closed Tab.
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
         let mods = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
-        let normalizedMods = mods.subtracting(.numericPad)
         let key = event.charactersIgnoringModifiers?.lowercased()
-        if normalizedMods == .option, event.keyCode == UInt16(kVK_LeftArrow) {
+        if mods == .command || mods == [.command, .shift],
+           key == "`" || event.keyCode == UInt16(kVK_ANSI_Grave) {
             NotificationCenter.default.post(
                 name: FloatingPanel.sidebarShortcutNotification,
                 object: self,
                 userInfo: [
                     FloatingPanel.sidebarShortcutActionUserInfoKey:
-                        SidebarShortcutAction.cycleLayoutsReverse.rawValue
-                ]
-            )
-            return true
-        }
-        if normalizedMods == .option, event.keyCode == UInt16(kVK_RightArrow) {
-            NotificationCenter.default.post(
-                name: FloatingPanel.sidebarShortcutNotification,
-                object: self,
-                userInfo: [
-                    FloatingPanel.sidebarShortcutActionUserInfoKey:
-                        SidebarShortcutAction.cycleLayouts.rawValue
+                        (mods.contains(.shift) ? SidebarShortcutAction.cycleLayoutsReverse : .cycleLayouts).rawValue
                 ]
             )
             return true
@@ -922,6 +917,30 @@ class FloatingPanel: NSPanel {
         guard mods.contains(.command), !mods.contains(.shift) else { return super.performKeyEquivalent(with: event) }
         if key == "t" {
             NotificationCenter.default.post(name: FloatingPanel.requestNewTaskNotification, object: self)
+            return true
+        }
+        if key == "l" || event.keyCode == UInt16(kVK_ANSI_L) {
+            NotificationCenter.default.post(
+                name: FloatingPanel.sidebarShortcutNotification,
+                object: self,
+                userInfo: [FloatingPanel.sidebarShortcutActionUserInfoKey: SidebarShortcutAction.collapseLeft.rawValue]
+            )
+            return true
+        }
+        if key == "o" || event.keyCode == UInt16(kVK_ANSI_O) {
+            NotificationCenter.default.post(
+                name: FloatingPanel.sidebarShortcutNotification,
+                object: self,
+                userInfo: [FloatingPanel.sidebarShortcutActionUserInfoKey: SidebarShortcutAction.expandOrFlip.rawValue]
+            )
+            return true
+        }
+        if key == "r" || event.keyCode == UInt16(kVK_ANSI_R) {
+            NotificationCenter.default.post(
+                name: FloatingPanel.sidebarShortcutNotification,
+                object: self,
+                userInfo: [FloatingPanel.sidebarShortcutActionUserInfoKey: SidebarShortcutAction.collapseRight.rawValue]
+            )
             return true
         }
         // US `[` / `]` keys; also match ANSI virtual keys when Option/layout changes charactersIgnoringModifiers.

@@ -39,11 +39,10 @@ struct KeyboardShortcutsContentView: View {
         ]),
         ("Window", [
             ShortcutRow(keys: ["⌘B", "⌘S"], action: "Collapse/expand main content"),
-            ShortcutRow(keys: ["⌘1"], action: "Dock left"),
-            ShortcutRow(keys: ["⌘2"], action: "Expanded left"),
-            ShortcutRow(keys: ["⌘3"], action: "Expanded right"),
-            ShortcutRow(keys: ["⌘4"], action: "Dock right"),
-            ShortcutRow(keys: ["⌥←", "⌥→"], action: "Cycle layouts backward or forward"),
+            ShortcutRow(keys: ["⌘L"], action: "Dock left"),
+            ShortcutRow(keys: ["⌘O"], action: "Expand or flip layout"),
+            ShortcutRow(keys: ["⌘R"], action: "Dock right"),
+            ShortcutRow(keys: ["⌘`", "⌘⇧`"], action: "Cycle layouts forward or backward"),
         ]),
     ]
 

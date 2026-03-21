@@ -1311,10 +1311,36 @@ struct PopoutView: View {
                 toggleMainContentCollapsed()
             }
 
-            ForEach(WindowLayoutOption.allCases) { layout in
-                hiddenShortcutButton(layout.title, key: layout.shortcutKey) {
-                    applyWindowLayout(layout)
-                }
+            hiddenShortcutButton("Dock left", key: "l") {
+                applyWindowLayout(.dockLeft)
+            }
+
+            hiddenShortcutButton("Expand or flip layout", key: "o") {
+                NotificationCenter.default.post(
+                    name: FloatingPanel.sidebarShortcutNotification,
+                    object: nil,
+                    userInfo: [FloatingPanel.sidebarShortcutActionUserInfoKey: FloatingPanel.SidebarShortcutAction.expandOrFlip.rawValue]
+                )
+            }
+
+            hiddenShortcutButton("Dock right", key: "r") {
+                applyWindowLayout(.dockRight)
+            }
+
+            hiddenShortcutButton("Cycle layouts forward", key: "`") {
+                NotificationCenter.default.post(
+                    name: FloatingPanel.sidebarShortcutNotification,
+                    object: nil,
+                    userInfo: [FloatingPanel.sidebarShortcutActionUserInfoKey: FloatingPanel.SidebarShortcutAction.cycleLayouts.rawValue]
+                )
+            }
+
+            hiddenShortcutButton("Cycle layouts backward", key: "`", modifiers: [.command, .shift]) {
+                NotificationCenter.default.post(
+                    name: FloatingPanel.sidebarShortcutNotification,
+                    object: nil,
+                    userInfo: [FloatingPanel.sidebarShortcutActionUserInfoKey: FloatingPanel.SidebarShortcutAction.cycleLayoutsReverse.rawValue]
+                )
             }
 
             if sidebarCycleDestinations().count > 1 {
@@ -1587,29 +1613,16 @@ struct PopoutView: View {
             }
         }
 
-        var shortcutKey: KeyEquivalent {
-            switch self {
-            case .dockLeft:
-                return "1"
-            case .expandedLeft:
-                return "2"
-            case .expandedRight:
-                return "3"
-            case .dockRight:
-                return "4"
-            }
-        }
-
         var shortcutDisplay: String {
             switch self {
             case .dockLeft:
-                return "⌘1"
+                return "⌘L"
             case .expandedLeft:
-                return "⌘2"
+                return "⌘O"
             case .expandedRight:
-                return "⌘3"
+                return "⌘O"
             case .dockRight:
-                return "⌘4"
+                return "⌘R"
             }
         }
 
@@ -1656,10 +1669,14 @@ struct PopoutView: View {
     }
 
     private var layoutCycleIcon: some View {
-        Image(systemName: "arrow.left.arrow.right.circle")
-            .font(.system(size: CursorTheme.fontBodySmall, weight: .medium))
+        Text("`")
+            .font(.system(size: CursorTheme.fontSmall, weight: .semibold, design: .rounded))
             .foregroundStyle(CursorTheme.textSecondary(for: colorScheme))
             .frame(width: CursorTheme.spaceL, height: CursorTheme.spaceL)
+            .overlay(
+                Circle()
+                    .stroke(CursorTheme.textSecondary(for: colorScheme), lineWidth: 1)
+            )
     }
 
     private var layoutCycleHintRow: some View {
