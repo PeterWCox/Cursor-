@@ -1286,7 +1286,7 @@ private struct TaskRowView: View {
             ?? ModelOption(id: AvailableModels.autoID, label: "Auto", isPremium: false)
     }
     @State private var focusEditor: (() -> Void)?
-    @State private var followUpsExpanded = false
+    @State private var followUpsExpanded = true
 
     @ViewBuilder
     private var followUpDisclosureButton: some View {
@@ -1559,7 +1559,11 @@ private struct TaskRowView: View {
             }
         }
         .onChange(of: userFollowUps.isEmpty) { _, empty in
-            if empty { followUpsExpanded = false }
+            if empty {
+                followUpsExpanded = false
+            } else {
+                followUpsExpanded = true
+            }
         }
     }
 
