@@ -1214,19 +1214,19 @@ struct PopoutView: View {
                 }
             }
 
-            hiddenShortcutButton("Cycle left-dock layout", key: "[", modifiers: .command) {
+            hiddenShortcutButton("Dock left", key: "]", modifiers: .command) {
                 NotificationCenter.default.post(
                     name: FloatingPanel.sidebarShortcutNotification,
                     object: nil,
-                    userInfo: [FloatingPanel.sidebarShortcutActionUserInfoKey: FloatingPanel.SidebarShortcutAction.cycleLeftAnchor.rawValue]
+                    userInfo: [FloatingPanel.sidebarShortcutActionUserInfoKey: FloatingPanel.SidebarShortcutAction.collapseLeft.rawValue]
                 )
             }
 
-            hiddenShortcutButton("Cycle right-dock layout", key: "]", modifiers: .command) {
+            hiddenShortcutButton("Dock right", key: "\\", modifiers: .command) {
                 NotificationCenter.default.post(
                     name: FloatingPanel.sidebarShortcutNotification,
                     object: nil,
-                    userInfo: [FloatingPanel.sidebarShortcutActionUserInfoKey: FloatingPanel.SidebarShortcutAction.cycleRightAnchor.rawValue]
+                    userInfo: [FloatingPanel.sidebarShortcutActionUserInfoKey: FloatingPanel.SidebarShortcutAction.collapseRight.rawValue]
                 )
             }
         }
@@ -1525,10 +1525,14 @@ struct PopoutView: View {
 
         var shortcutDisplay: String {
             switch self {
-            case .dockLeft, .expandedLeft:
-                return "⌘["
-            case .expandedRight, .dockRight:
+            case .dockLeft:
                 return "⌘]"
+            case .expandedLeft:
+                return "⌥2"
+            case .expandedRight:
+                return "⌥3"
+            case .dockRight:
+                return "⌘\\"
             }
         }
 

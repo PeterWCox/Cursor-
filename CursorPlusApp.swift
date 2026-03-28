@@ -569,36 +569,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMenuDele
             cycleSidebarLayouts(reverse: false)
         case .cycleLayoutsReverse:
             cycleSidebarLayouts(reverse: true)
-        case .cycleLeftAnchor:
-            cycleLeftAnchoredLayout()
-        case .cycleRightAnchor:
-            cycleRightAnchoredLayout()
-        }
-    }
-
-    /// ⌘[: left docked ↔ expanded on the left; from a right-side layout, snaps to left docked first.
-    private func cycleLeftAnchoredLayout() {
-        let collapsed = appState.isMainContentCollapsed
-        let sidebarOnRight = UserDefaults.standard.bool(forKey: AppPreferences.sidebarOnRightKey)
-        if !sidebarOnRight && !collapsed {
-            applySidebarShortcut(.collapseLeft)
-        } else if !sidebarOnRight && collapsed {
-            applySidebarShortcut(.expandLeft)
-        } else {
-            applySidebarShortcut(.collapseLeft)
-        }
-    }
-
-    /// ⌘]: right docked ↔ expanded on the right; from a left-side layout, snaps to right docked first.
-    private func cycleRightAnchoredLayout() {
-        let collapsed = appState.isMainContentCollapsed
-        let sidebarOnRight = UserDefaults.standard.bool(forKey: AppPreferences.sidebarOnRightKey)
-        if sidebarOnRight && !collapsed {
-            applySidebarShortcut(.collapseRight)
-        } else if sidebarOnRight && collapsed {
-            applySidebarShortcut(.expandRight)
-        } else {
-            applySidebarShortcut(.collapseRight)
         }
     }
 
@@ -919,8 +889,6 @@ class FloatingPanel: NSPanel {
         case expandOrFlip
         case cycleLayouts
         case cycleLayoutsReverse
-        case cycleLeftAnchor
-        case cycleRightAnchor
     }
 
     private static let defaultWidth: CGFloat = 720
@@ -997,20 +965,20 @@ class FloatingPanel: NSPanel {
             )
             return true
         }
-        // US `[` / `]`; also match ANSI virtual keys when Option/layout changes charactersIgnoringModifiers.
-        if key == "[" || event.keyCode == UInt16(kVK_ANSI_LeftBracket) {
-            NotificationCenter.default.post(
-                name: FloatingPanel.sidebarShortcutNotification,
-                object: self,
-                userInfo: [FloatingPanel.sidebarShortcutActionUserInfoKey: SidebarShortcutAction.cycleLeftAnchor.rawValue]
-            )
-            return true
-        }
+        // ⌘] — dock left (sidebar only); ⌘\ — dock right. Match ANSI key codes when layout changes charactersIgnoringModifiers.
         if key == "]" || event.keyCode == UInt16(kVK_ANSI_RightBracket) {
             NotificationCenter.default.post(
                 name: FloatingPanel.sidebarShortcutNotification,
                 object: self,
-                userInfo: [FloatingPanel.sidebarShortcutActionUserInfoKey: SidebarShortcutAction.cycleRightAnchor.rawValue]
+                userInfo: [FloatingPanel.sidebarShortcutActionUserInfoKey: SidebarShortcutAction.collapseLeft.rawValue]
+            )
+            return true
+        }
+        if key == "\\" || event.keyCode == UInt16(kVK_ANSI_Backslash) {
+            NotificationCenter.default.post(
+                name: FloatingPanel.sidebarShortcutNotification,
+                object: self,
+                userInfo: [FloatingPanel.sidebarShortcutActionUserInfoKey: SidebarShortcutAction.collapseRight.rawValue]
             )
             return true
         }
