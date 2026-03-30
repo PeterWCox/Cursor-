@@ -155,6 +155,12 @@ enum CursorTheme {
     static let sizeAgentHeaderAvatar: CGFloat = 40
     /// Centered status badge size used inside the active agent header avatar.
     static let sizeAgentHeaderStatusBadge: CGFloat = 22
+    /// Small status dot for dense sidebar and list UI.
+    static let sizeStatusDotCompact: CGFloat = 7
+    /// Default status dot for section headers and row-leading markers.
+    static let sizeStatusDotDefault: CGFloat = 8
+    /// Slightly larger status dot for the active agent header badge.
+    static let sizeStatusDotHeader: CGFloat = 9
     /// Small padding for badges and tags (horizontal).
     static let paddingBadgeHorizontal: CGFloat = 5
     /// Small padding for badges and tags (vertical).

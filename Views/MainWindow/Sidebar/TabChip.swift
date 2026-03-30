@@ -19,6 +19,18 @@ struct LightBlueSpinner: View {
     }
 }
 
+struct StatusDot: View {
+    let color: Color
+    var size: CGFloat = CursorTheme.sizeStatusDotDefault
+
+    var body: some View {
+        Circle()
+            .fill(color)
+            .frame(width: size, height: size)
+            .accessibilityHidden(true)
+    }
+}
+
 // MARK: - Tab bar chip (horizontal or vertical with optional subtitle)
 
 struct TabChip: View {
@@ -52,19 +64,16 @@ struct TabChip: View {
     private var compactContent: some View {
         Group {
             if isRunning {
-                LightBlueSpinner(size: 15)
+                StatusDot(color: CursorTheme.spinnerBlue, size: CursorTheme.sizeStatusDotHeader)
             } else if latestTurnState == .stopped {
-                Image(systemName: "square.fill")
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(CursorTheme.semanticError)
+                StatusDot(color: CursorTheme.semanticError, size: CursorTheme.sizeStatusDotHeader)
             } else if hasPrompted {
-                Image(systemName: "clock.fill")
-                    .font(.system(size: 15))
-                    .foregroundStyle(isSelected ? CursorTheme.brandBlue : CursorTheme.semanticReview)
+                StatusDot(
+                    color: isSelected ? CursorTheme.brandBlue : CursorTheme.semanticReview,
+                    size: CursorTheme.sizeStatusDotHeader
+                )
             } else {
-                Image(systemName: "bubble.left")
-                    .font(.system(size: 15))
-                    .foregroundStyle(CursorTheme.textTertiary(for: colorScheme))
+                StatusDot(color: CursorTheme.textTertiary(for: colorScheme), size: CursorTheme.sizeStatusDotHeader)
             }
         }
         .frame(width: CursorTheme.sizeSidebarCompactChip, height: CursorTheme.sizeSidebarCompactChip)
@@ -83,26 +92,20 @@ struct TabChip: View {
         )
     }
 
-    /// Fixed width so all tab pills align; icon (spinner/symbol) is centered within.
+    /// Fixed width so all tab pills align; status marker is centered within.
     private static let iconContainerWidth: CGFloat = 16
 
     private var fullContent: some View {
         HStack(spacing: CursorTheme.spaceS) {
             Group {
                 if isRunning {
-                    LightBlueSpinner(size: 10)
+                    StatusDot(color: CursorTheme.spinnerBlue, size: CursorTheme.sizeStatusDotCompact)
                 } else if latestTurnState == .stopped {
-                    Image(systemName: "square.fill")
-                        .font(.system(size: 11, weight: .semibold))
-                        .foregroundStyle(CursorTheme.semanticError)
+                    StatusDot(color: CursorTheme.semanticError, size: CursorTheme.sizeStatusDotCompact)
                 } else if hasPrompted {
-                    Image(systemName: "clock.fill")
-                        .font(.system(size: 12))
-                        .foregroundStyle(CursorTheme.semanticReview)
+                    StatusDot(color: CursorTheme.semanticReview, size: CursorTheme.sizeStatusDotCompact)
                 } else {
-                    Image(systemName: "bubble.left")
-                        .font(.system(size: 12))
-                        .foregroundStyle(CursorTheme.textTertiary(for: colorScheme))
+                    StatusDot(color: CursorTheme.textTertiary(for: colorScheme), size: CursorTheme.sizeStatusDotCompact)
                 }
             }
             .frame(width: Self.iconContainerWidth, height: 16, alignment: .center)

@@ -118,6 +118,8 @@ final class TasksListStore: ObservableObject {
     private var tasks: [ProjectTask] = []
     private var deletedTasksList: [ProjectTask] = []
     private var linkedStatuses: [UUID: AgentTaskState] = [:]
+    /// Task title when the user commits screenshot(s) only (no written description).
+    private static let screenshotOnlyTaskTitle = "Screenshot"
     private var tasksObserver: NSObjectProtocol?
     private var settingsObserver: NSObjectProtocol?
 
@@ -202,16 +204,18 @@ final class TasksListStore: ObservableObject {
 
     func commitNewTask(screenshotData: [Data], providerID: AgentProviderID) {
         let trimmed = newTaskDraft.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty, !workspacePath.isEmpty else { return }
+        guard !workspacePath.isEmpty else { return }
+        guard !trimmed.isEmpty || !screenshotData.isEmpty else { return }
+        let content = trimmed.isEmpty ? Self.screenshotOnlyTaskTitle : trimmed
         recordHangEvent("tasks-commit-new-task", metadata: [
-            "contentLength": "\(trimmed.count)",
+            "contentLength": "\(content.count)",
             "screenshots": "\(screenshotData.count)"
         ])
 
         let taskState: TaskState = (selectedTasksTab == .backlog) ? .backlog : .inProgress
         _ = ProjectTasksStorage.addTask(
             workspacePath: workspacePath,
-            content: trimmed,
+            content: content,
             screenshotData: screenshotData,
             providerID: providerID,
             modelId: newTaskModelId,
@@ -254,11 +258,18 @@ final class TasksListStore: ObservableObject {
 
     func commitEdit(screenshotData: [Data]) {
         let trimmed = editingDraft.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !trimmed.isEmpty, let id = editingTask?.id, !workspacePath.isEmpty {
-            ProjectTasksStorage.updateTask(workspacePath: workspacePath, id: id, content: trimmed)
-            ProjectTasksStorage.updateTaskScreenshots(workspacePath: workspacePath, id: id, screenshotData: screenshotData)
-            reload()
+        guard let id = editingTask?.id, !workspacePath.isEmpty else {
+            editingTask = nil
+            return
         }
+        guard !trimmed.isEmpty || !screenshotData.isEmpty else {
+            editingTask = nil
+            return
+        }
+        let content = trimmed.isEmpty ? Self.screenshotOnlyTaskTitle : trimmed
+        ProjectTasksStorage.updateTask(workspacePath: workspacePath, id: id, content: content)
+        ProjectTasksStorage.updateTaskScreenshots(workspacePath: workspacePath, id: id, screenshotData: screenshotData)
+        reload()
         editingTask = nil
     }
 

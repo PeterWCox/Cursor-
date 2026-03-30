@@ -131,6 +131,25 @@ final class TasksListStoreTests: XCTestCase {
     }
 
     @MainActor
+    func testCommitNewTaskScreenshotOnlyUsesDefaultTitle() throws {
+        let workspacePath = try makeWorkspacePath()
+        let png = try makeTestPNGData(color: .systemOrange)
+
+        let store = TasksListStore()
+        store.configure(workspacePath: workspacePath, linkedStatuses: [:])
+        store.showNewTaskComposer(selecting: .inProgress)
+        store.newTaskDraft = ""
+
+        store.commitNewTask(screenshotData: [png], providerID: .cursor)
+
+        let tasks = ProjectTasksStorage.tasks(workspacePath: workspacePath)
+        XCTAssertEqual(tasks.count, 1)
+        XCTAssertEqual(tasks[0].content, "Screenshot")
+        XCTAssertEqual(tasks[0].screenshotPaths.count, 1)
+        XCTAssertFalse(store.isAddingNewTask)
+    }
+
+    @MainActor
     func testCommitEditReplacesScreenshotSet() throws {
         let workspacePath = try makeWorkspacePath()
         let originalTask = ProjectTasksStorage.addTask(

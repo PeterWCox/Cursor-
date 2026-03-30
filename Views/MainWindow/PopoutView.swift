@@ -1859,46 +1859,65 @@ struct PopoutView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
-    /// Shown when Preview is selected but Run has not been clicked yet.
+    /// Shown when Preview is selected but no terminals are open yet (splash-style empty state, no tab strip).
     private func dashboardEmptyStateView(workspacePath path: String) -> some View {
         let root = projectRootForTerminal(workspacePath: path)
         let isConfigured = !projectSettingsStore.startupScripts(for: root).isEmpty
-        return VStack(spacing: CursorTheme.spaceXL) {
-            Image(systemName: "eye")
-                .font(.system(size: 48, weight: .medium))
-                .foregroundStyle(CursorTheme.textTertiary(for: colorScheme))
-                .symbolRenderingMode(.hierarchical)
-            Text("Click Run to start your startup scripts")
-                .font(.system(size: CursorTheme.fontBodyEmphasis, weight: .medium))
-                .foregroundStyle(CursorTheme.textSecondary(for: colorScheme))
-            HStack(spacing: CursorTheme.spaceS) {
-                Spacer(minLength: 0)
-                if isConfigured {
-                    ActionButton(
-                        title: "Run",
-                        icon: "play.fill",
-                        action: { openDashboard(workspacePath: path) },
-                        help: "Run each startup script in its own Preview tab",
-                        style: .primary
+        return VStack(spacing: 0) {
+            Spacer(minLength: 40)
+            VStack(spacing: 28) {
+                Image(systemName: "eye")
+                    .font(.system(size: 64, weight: .medium))
+                    .foregroundStyle(CursorTheme.textTertiary(for: colorScheme))
+                    .symbolRenderingMode(.hierarchical)
+                VStack(spacing: 12) {
+                    Text(isConfigured ? "Ready to preview" : "Set up Preview")
+                        .font(.system(size: CursorTheme.fontTitleLarge, weight: .semibold))
+                        .foregroundStyle(CursorTheme.textPrimary(for: colorScheme))
+                        .multilineTextAlignment(.center)
+                    Text(
+                        isConfigured
+                            ? "Run starts each startup script in its own tab. You can also add a blank terminal or change scripts with the setup agent."
+                            : "Run the setup agent to create `.metro/project.json` with startup scripts and a debug URL, then use Run to open terminals here."
                     )
+                    .font(.system(size: CursorTheme.fontBody, weight: .regular))
+                    .foregroundStyle(CursorTheme.textSecondary(for: colorScheme))
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: 380)
                 }
-                ActionButton(
-                    title: "Add Terminal",
-                    icon: "plus",
-                    action: { addNewTerminalTab(lastWorkspacePath: path) },
-                    help: "Open a manual terminal tab in Preview",
-                    style: .secondary
-                )
-                ActionButton(
-                    title: isConfigured ? "Regenerate Setup" : "Configure Setup",
-                    icon: "gearshape",
-                    action: { _ = addNewAgentTab(initialPrompt: makeProjectSetupPrompt(), lastWorkspacePath: path) },
-                    help: isConfigured ? "Launch an agent to regenerate .metro/project.json scripts and debug URL" : "Launch an agent to set up .metro/project.json scripts and debug URL for this project",
-                    style: .primary
-                )
-                Spacer(minLength: 0)
+                VStack(spacing: CursorTheme.spaceM) {
+                    if isConfigured {
+                        ActionButton(
+                            title: "Run",
+                            icon: "play.fill",
+                            action: { openDashboard(workspacePath: path) },
+                            help: "Run each startup script in its own Preview tab",
+                            style: .primary
+                        )
+                        .frame(maxWidth: .infinity)
+                    }
+                    ActionButton(
+                        title: "Add Terminal",
+                        icon: "plus",
+                        action: { addNewTerminalTab(lastWorkspacePath: path) },
+                        help: "Open a manual terminal tab in Preview",
+                        style: .secondary
+                    )
+                    .frame(maxWidth: .infinity)
+                    ActionButton(
+                        title: isConfigured ? "Regenerate Setup" : "Configure Setup",
+                        icon: "gearshape",
+                        action: { _ = addNewAgentTab(initialPrompt: makeProjectSetupPrompt(), lastWorkspacePath: path) },
+                        help: isConfigured ? "Launch an agent to regenerate .metro/project.json scripts and debug URL" : "Launch an agent to set up .metro/project.json scripts and debug URL for this project",
+                        style: isConfigured ? .secondary : .primary
+                    )
+                    .frame(maxWidth: .infinity)
+                }
+                .frame(maxWidth: 360)
             }
-            .frame(maxWidth: .infinity)
+            .padding(32)
+            Spacer(minLength: 40)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .onAppear {
@@ -2003,8 +2022,10 @@ struct PopoutView: View {
     }
 
     private var shouldShowMainColumnSecondaryBar: Bool {
-        tabManager.selectedDashboardViewPath == selectedProjectPath
-            && selectedProjectPath?.isEmpty == false
+        guard tabManager.selectedDashboardViewPath == selectedProjectPath,
+              let path = selectedProjectPath, !path.isEmpty else { return false }
+        // No tab strip when there are no terminals—the lone "Preview" pill duplicated the sidebar.
+        return !dashboardPanelTerminals(for: path).isEmpty
     }
 
     private var mainColumn: some View {
@@ -2252,6 +2273,14 @@ struct PopoutView: View {
         #endif
     }
 
+    private var sidebarHeaderControls: some View {
+        HStack(spacing: 0) {
+            layoutMenuButton
+            IconButton(icon: "gearshape", action: { appState.showSettingsSheet = true }, help: "Settings")
+            IconButton(icon: "minus", action: dismiss, help: "Minimise")
+        }
+    }
+
     /// Logo + BETA/DEBUG in sidebar column; when sidebar on right, header is mirrored (expand/menu on leading edge). Logo uses active project color.
     private var leftColumnHeader: some View {
         let projectColor = currentWorkspacePath.isEmpty
@@ -2281,22 +2310,15 @@ struct PopoutView: View {
             }
 
             Spacer(minLength: 0)
-            if isMainContentCollapsed {
-                layoutMenuButton
-                IconButton(icon: "gearshape", action: { appState.showSettingsSheet = true }, help: "Settings")
-                IconButton(icon: "minus", action: dismiss, help: "Minimise")
-            }
+            sidebarHeaderControls
         }
     }
 
-    /// Single title row: icon + header (e.g. Tasks / agent title) on the left, title bar buttons (collapse, sidebar, settings, minimise) on the right.
+    /// Single title row: icon + header (e.g. Tasks / agent title) on the left.
     private var mainColumnTitleRow: some View {
         return HStack(alignment: .center, spacing: 0) {
             mainColumnTitleContent
                 .frame(minWidth: 0, maxWidth: .infinity, alignment: .leading)
-            layoutMenuButton
-            IconButton(icon: "gearshape", action: { appState.showSettingsSheet = true }, help: "Settings")
-            IconButton(icon: "minus", action: dismiss, help: "Minimise")
         }
         .padding(.horizontal, CursorTheme.paddingChrome)
         .padding(.vertical, CursorTheme.paddingHeaderVertical)
@@ -3038,26 +3060,17 @@ struct PopoutView: View {
         status: (label: String, isProcessing: Bool, isPendingReview: Bool, isStopped: Bool, isCompleted: Bool),
         compact: Bool = false
     ) -> some View {
-        let spinnerSize = compact ? CursorTheme.fontSmall : CursorTheme.fontIconList - 4
-        let symbolSize = compact ? CursorTheme.fontSmall : CursorTheme.fontIconList
+        let dotSize = compact ? CursorTheme.sizeStatusDotCompact : CursorTheme.sizeStatusDotHeader
         if status.isProcessing {
-            LightBlueSpinner(size: spinnerSize)
+            StatusDot(color: CursorTheme.spinnerBlue, size: dotSize)
         } else if status.isStopped {
-            Image(systemName: "square.fill")
-                .font(.system(size: compact ? symbolSize - 1 : symbolSize - 2, weight: .semibold))
-                .foregroundStyle(CursorTheme.semanticError)
+            StatusDot(color: CursorTheme.semanticError, size: dotSize)
         } else if status.isPendingReview {
-            Image(systemName: "clock.fill")
-                .font(.system(size: symbolSize, weight: .medium))
-                .foregroundStyle(CursorTheme.semanticReview)
+            StatusDot(color: CursorTheme.semanticReview, size: dotSize)
         } else if status.isCompleted {
-            Image(systemName: "checkmark.circle.fill")
-                .font(.system(size: symbolSize))
-                .foregroundStyle(CursorTheme.brandBlue)
+            StatusDot(color: CursorTheme.brandBlue, size: dotSize)
         } else {
-            Image(systemName: "person.crop.circle")
-                .font(.system(size: symbolSize, weight: .medium))
-                .foregroundStyle(CursorTheme.textSecondary(for: colorScheme))
+            StatusDot(color: CursorTheme.textSecondary(for: colorScheme), size: dotSize)
         }
     }
 

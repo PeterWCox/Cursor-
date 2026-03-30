@@ -600,25 +600,18 @@ struct TasksListView: View {
         Group {
             switch title {
             case "Review":
-                Image(systemName: "clock.fill")
-                    .font(.system(size: CursorTheme.fontIconList))
-                    .foregroundStyle(CursorTheme.semanticReview)
+                StatusDot(color: CursorTheme.semanticReview)
             case "Stopped":
-                Image(systemName: "square.fill")
-                    .font(.system(size: CursorTheme.fontIconList, weight: .semibold))
-                    .foregroundStyle(CursorTheme.semanticError)
+                StatusDot(color: CursorTheme.semanticError)
             case "Processing":
-                LightBlueSpinner(size: CursorTheme.fontIconList - 4)
+                StatusDot(color: CursorTheme.spinnerBlue)
             case "Todo":
-                Image(systemName: "person")
-                    .font(.system(size: CursorTheme.fontIconList - 2, weight: .medium))
-                    .foregroundStyle(CursorTheme.textTertiary(for: colorScheme))
+                StatusDot(color: CursorTheme.textTertiary(for: colorScheme))
             default:
-                Image(systemName: "circle")
-                    .font(.system(size: CursorTheme.fontIconList))
-                    .foregroundStyle(CursorTheme.textTertiary(for: colorScheme))
+                StatusDot(color: CursorTheme.textTertiary(for: colorScheme))
             }
         }
+        .frame(width: CursorTheme.fontIconList, height: CursorTheme.fontIconList)
     }
 
     @ViewBuilder
